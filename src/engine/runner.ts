@@ -69,7 +69,13 @@ export class CliRunner implements AgentRunner {
 
     const child = spawnLines(this.#opts.claudePath, [...(this.#opts.claudeArgs ?? []), ...argv], {
       cwd: spec.cwd,
-      env: { ...process.env, ...SPAWN_ENV, ...spec.env } as Record<string, string>,
+      env: {
+        ...process.env,
+        ...SPAWN_ENV,
+        AGENTOPOLIS_TURN_ID: String(spec.turnId),
+        AGENTOPOLIS_AGENT: spec.agent,
+        ...spec.env,
+      } as Record<string, string>,
       teeTo: runFile,
       onStderr: (chunk) => {
         stderr = (stderr + chunk).slice(-STDERR_TAIL);

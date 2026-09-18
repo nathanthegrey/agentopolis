@@ -97,6 +97,38 @@ for (const step of steps) {
       );
       process.exit(4);
     }
+  } else if ("tool_call" in step) {
+    // Behave like the CLI: start the agentopolis MCP server named in --mcp-config with the
+    // environment we inherited, call one tool over stdio, and report its text as the result.
+    const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+    const { StdioClientTransport } = await import("@modelcontextprotocol/sdk/client/stdio.js");
+    const mcpConfig = JSON.parse(readFileSync(argValue("--mcp-config"), "utf8"));
+    const def = mcpConfig.mcpServers?.agentopolis;
+    if (!def) {
+      process.stderr.write("fake-claude: --mcp-config has no agentopolis server\n");
+      process.exit(5);
+    }
+    const client = new Client({ name: "fake-claude", version: "0" });
+    await client.connect(
+      new StdioClientTransport({
+        command: def.command,
+        args: def.args,
+        env: process.env,
+        stderr: "pipe",
+      }),
+    );
+    const r = await client.callTool({
+      name: step.tool_call.name,
+      arguments: step.tool_call.arguments ?? {},
+    });
+    await client.close();
+    const text = r.content?.[0]?.text ?? "";
+    emit({
+      type: "result",
+      subtype: r.isError ? "error_during_execution" : "success",
+      ...(step.then_result ?? {}),
+      result: text,
+    });
   } else if ("hang" in step) {
     if (step.hang?.ignore_sigint) process.on("SIGINT", () => {});
     setInterval(() => {}, 1000);

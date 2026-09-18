@@ -2,7 +2,11 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { buildMcpConfig } from "../../src/engine/mcp-config.js";
 import { CliRunner } from "../../src/engine/runner.js";
+import { mcpServerCommand } from "../../src/mcp/server-command.js";
+import { startToolSocket } from "../../src/mcp/socket-server.js";
+import type { ToolContext, ToolHandlers } from "../../src/mcp/tools.js";
 import { FakeClock } from "../../src/ports/clock.js";
 import type {
   PermissionDecision,
@@ -178,4 +182,42 @@ describe("CliRunner", () => {
     expect(argv[argv.indexOf("--permission-prompt-tool") + 1]).toBe("stdio");
     expect(argv[argv.indexOf("--session-id") + 1]).toBe(SESSION);
   });
+
+  it("tool-call: the turn's MCP server reaches the daemon socket with the per-turn token", async () => {
+    const t = setup("tool-call");
+    const socketPath = join(t.runsDir, "daemon.sock");
+    const seen: ToolContext[] = [];
+    const status = { budget_left_usd: "9.99", open_asks: 0 };
+    const noop = async () => null;
+    const handlers: ToolHandlers = {
+      post: noop,
+      answer: noop,
+      read_channel: noop,
+      request: noop,
+      remember: noop,
+      status: async (ctx) => {
+        seen.push(ctx);
+        return status;
+      },
+    };
+    const socket = await startToolSocket({
+      path: socketPath,
+      tokens: new Map([["turn-token-1", { agent: "ceo", turnId: 1 }]]),
+      handlers,
+    });
+    const spec = {
+      ...t.spec,
+      mcpConfig: JSON.parse(buildMcpConfig(t.spec.role, {}, mcpServerCommand())),
+      env: { ...t.spec.env, AGENTOPOLIS_SOCKET: socketPath, AGENTOPOLIS_TOKEN: "turn-token-1" },
+    };
+    try {
+      const o = await t.runner.run(spec, t.events());
+      expect(o.status).toBe("ok");
+      expect(JSON.parse(o.resultText ?? "")).toEqual(status);
+      expect(seen).toEqual([{ agent: "ceo", turnId: 1 }]);
+      expect(o.costMicro).toBe(1000);
+    } finally {
+      await socket.close();
+    }
+  }, 20_000);
 });
