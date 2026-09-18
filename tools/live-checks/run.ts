@@ -1,8 +1,9 @@
 // Spec section 18, checks 3–6, against the REAL claude CLI. Run by the owner, by hand:
-//   AGENTOPOLIS_LIVE=1 pnpm live:checks
+//   AGENTOPOLIS_LIVE=1 pnpm live:checks                        (all four)
+//   AGENTOPOLIS_LIVE=1 AGENTOPOLIS_CHECKS=4 pnpm live:checks   (one check alone)
 // Haiku, --max-budget-usd 0.05 per run, never --bare. Each check prints `CHECK <n>: <answer>`
 // and the path of the raw run file that is its evidence. Nothing here runs under `pnpm test`.
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,6 +28,14 @@ if (process.env.AGENTOPOLIS_LIVE !== "1") {
 }
 
 const HOLD_S = Number(process.env.AGENTOPOLIS_CHECK_HOLD_S ?? "200");
+// AGENTOPOLIS_CHECKS=4 (or "3,6") reruns only those checks; unset = all four
+const ONLY = new Set(
+  (process.env.AGENTOPOLIS_CHECKS ?? "3,4,5,6")
+    .split(",")
+    .map((n) => Number(n.trim()))
+    .filter((n) => Number.isInteger(n)),
+);
+const wanted = (n: number) => ONLY.has(n);
 const BUDGET = 50_000; // 0.05 USD
 const HOOK = fileURLToPath(new URL("../../hooks/pre-tool-use.mjs", import.meta.url));
 const work = mkdtempSync(join(tmpdir(), "live-checks-"));
@@ -123,7 +132,7 @@ const report = (n: number, answer: string, o: TurnOutcome) =>
 
 try {
   // 3. structured_output under stream-json with --json-schema
-  {
+  if (wanted(3)) {
     const schema = '{"type":"object","properties":{"word":{"type":"string"}},"required":["word"]}';
     const o = await runner({ extraArgs: ["--json-schema", schema] }).run(
       spec({
@@ -144,9 +153,12 @@ try {
     );
   }
 
-  // 4. a can_use_tool request held for HOLD_S seconds, then allowed
-  {
+  // 4. a can_use_tool request held for HOLD_S seconds, then allowed.
+  // The command must WRITE: a read-only command such as `echo` is auto-approved by the CLI
+  // and never reaches the control channel (first live run, 2026-09-18).
+  if (wanted(4)) {
     const started = Date.now();
+    const check4File = join(work, "check4.txt");
     let held = 0;
     const events: RunnerEvents = {
       onPermission: async (req) => {
@@ -161,23 +173,29 @@ try {
         role: bashRole,
         sessionId: ids.uuid(),
         resume: false,
-        prompt:
-          "Esegui con lo strumento Bash il comando `echo ciao-dal-check-4` e riferisci l'output esatto.",
+        prompt: `Esegui con lo strumento Bash esattamente questo comando: printf ciao-dal-check-4 > ${check4File} && cat ${check4File} . Poi riferisci l'output esatto.`,
         systemPrompt: "Rispondi in una riga.",
         wallClockMs: (HOLD_S + 120) * 1000,
       }),
       events,
     );
-    const answered = held > 0 && o.status === "ok" && o.permissionDenials.length === 0;
+    const written = existsSync(check4File);
+    const answered = held > 0 && o.status === "ok" && o.permissionDenials.length === 0 && written;
+    const verdict =
+      held === 0
+        ? "INCONCLUSIVE: no can_use_tool request was emitted"
+        : answered
+          ? "answer ACCEPTED (file written after the hold)"
+          : "answer NOT accepted";
     report(
       4,
-      `${held} request(s) held ${HOLD_S} s; ${answered ? "answer ACCEPTED" : "answer NOT accepted"}; denials=${JSON.stringify(o.permissionDenials)}; took ${Math.round((Date.now() - started) / 1000)} s; text=${JSON.stringify(o.resultText)}`,
+      `${held} request(s) held ${HOLD_S} s; ${verdict}; file written=${written}; denials=${JSON.stringify(o.permissionDenials)}; took ${Math.round((Date.now() - started) / 1000)} s; text=${JSON.stringify(o.resultText)}`,
       o,
     );
   }
 
   // 5. --max-budget-usd 0.0001 on a two-tool-call prompt, under the subscription login
-  {
+  if (wanted(5)) {
     const o = await runner().run(
       spec({
         role: bashRole,
@@ -199,7 +217,7 @@ try {
   }
 
   // 6. system prompt rebuilt on --resume with --system-prompt-snapshot off
-  {
+  if (wanted(6)) {
     const sessionId = ids.uuid();
     const a = await runner().run(
       spec({
