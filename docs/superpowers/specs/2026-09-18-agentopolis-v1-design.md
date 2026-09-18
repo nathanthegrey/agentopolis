@@ -716,10 +716,19 @@ implementation task, with the answer recorded in this file:
 2. Are `agents.sessions.setStatus` / `rename` enabled for this workspace (`feature_disabled`
    otherwise), in a private channel thread, without `agent_view`?
 3. Does `--output-format stream-json` carry `structured_output` when `--json-schema` is passed?
+   **Yes.** The `result` line carried `structured_output: {"word":"ok"}` with `subtype:
+   success` [live 2026-09-18, claude 2.1.276].
 4. Is a `can_use_tool` request still answerable after a hold of more than 150 s (measured up to
    150 s)? The design does not depend on it (prompts are parked, not held), but the fake CLI's
    fixtures should match reality.
 5. Does `--max-budget-usd` stop a turn under a subscription login, given that costs are
    estimates?
+   **Yes.** With `--max-budget-usd 0.0001` and `apiKeySource: "none"` in init, a two-tool-call
+   prompt ended with `subtype: error_max_budget_usd`; the runner recorded `budget_exhausted`
+   and a cost of 9,439 µUSD [live 2026-09-18, claude 2.1.276].
 6. Do `--append-system-prompt-file` and `--system-prompt-snapshot off` behave on the VPS's CLI
    version as on 2.1.276 (both verified here).
+   **On the Mac, yes.** A resumed turn with a different prompt file answered `BETA` after the
+   first turn's `ALPHA`; `cache_creation` 3,895 then 4,067, `cache_read` 15,917 on the second
+   turn, so the resumed turn still hit the cache for the rest of the prefix [live 2026-09-18,
+   claude 2.1.276]. The VPS's own CLI version is re-checked in slice 7.
