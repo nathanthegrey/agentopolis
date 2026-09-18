@@ -1,0 +1,14 @@
+slack:
+  bot_token_env: SLACK_BOT_TOKEN        # secrets live in the environment, never in files
+  app_token_env: SLACK_APP_TOKEN
+  owner_user_id: U0000000000            # replace with your Slack user id
+  work_channel_suffix: -work
+language: it
+budgets:
+  company_monthly_usd: 300
+approvals:
+  timeout_hours: 24                     # merge_production never expires
+  snooze_hours: 4
+quiet_hours: { from: "23:00", to: "08:00", tz: Europe/Rome }
+daily_digest_at: "08:30"                # sent only if something happened
+max_concurrent_turns: 3
