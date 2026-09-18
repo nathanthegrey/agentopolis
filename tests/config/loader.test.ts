@@ -53,6 +53,15 @@ describe("loadHome", () => {
     expect(r.errors.every((e) => e.file.endsWith("agents/x/agent.yaml"))).toBe(true);
   });
 
+  it("gives the same version to identical content at different paths", () => {
+    const a = loadHome(copyOfValid());
+    const b = loadHome(copyOfValid());
+    expect(a.ok && b.ok).toBe(true);
+    if (!a.ok || !b.ok) return;
+    expect(a.snapshot.dir).not.toBe(b.snapshot.dir);
+    expect(a.snapshot.version).toBe(b.snapshot.version);
+  });
+
   it("changes version when any file changes", () => {
     const d = copyOfValid();
     const first = loadHome(d);

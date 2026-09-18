@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { parse as parseYaml } from "yaml";
 import type { z } from "zod";
 import { AgentFile, ConfigFile, ProjectFile, RoleFile } from "./schemas.js";
@@ -31,7 +31,7 @@ export function loadHome(dir: string): LoadResult {
       return undefined;
     }
     const bytes = readFileSync(file);
-    hash.update(file).update(bytes);
+    hash.update(relative(dir, file)).update(bytes);
     return bytes.toString("utf8");
   };
 
