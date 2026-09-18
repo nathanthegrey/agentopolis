@@ -55,4 +55,41 @@ describe("FakeChat", () => {
     await chat.upload({ channel: c1.id, filename: "a.txt", content: Buffer.from("a"), title: "a" });
     expect(chat.calls).toHaveLength(10);
   });
+
+  it("refuses duplicate action_ids with invalid_blocks, in messages and views, like the real Slack", async () => {
+    const chat = new FakeChat();
+    const dup = [
+      {
+        type: "actions",
+        elements: [
+          { type: "button", action_id: "answer" },
+          { type: "button", action_id: "answer" },
+        ],
+      },
+    ];
+    await expect(chat.post({ channel: "C1", text: "x", blocks: dup })).rejects.toMatchObject({
+      code: "invalid_blocks",
+    });
+    await expect(chat.publishHome("U1", { type: "home", blocks: dup })).rejects.toMatchObject({
+      code: "invalid_blocks",
+    });
+    await expect(chat.openModal("T1", { type: "modal", blocks: dup })).rejects.toMatchObject({
+      code: "invalid_blocks",
+    });
+    await expect(
+      chat.post({
+        channel: "C1",
+        text: "x",
+        blocks: [
+          {
+            type: "actions",
+            elements: [
+              { type: "button", action_id: "a:0" },
+              { type: "button", action_id: "a:1" },
+            ],
+          },
+        ],
+      }),
+    ).resolves.toBeTruthy();
+  });
 });

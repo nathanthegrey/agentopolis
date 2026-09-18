@@ -50,7 +50,7 @@ export function askCard(a: AskCardInput): Card {
   // no snooze button and no re-mention: an open ask simply stays open (spec section 9)
   const row =
     a.options.length <= 3
-      ? a.options.map((o, i) => button(o, "answer", `${a.renderId}:${i}`))
+      ? a.options.map((o, i) => button(o, `answer:${i}`, `${a.renderId}:${i}`))
       : [
           {
             type: "static_select",
@@ -187,7 +187,7 @@ export type HomeInput = {
   updatedAt: number;
 };
 
-/** the per-agent overflow menu: value "<op>:<agent>" for action_id agent_menu */
+/** the per-agent overflow menu: action_id "agent_menu:<agent>", value "<op>:<agent>" */
 export const AGENT_MENU_OPS = ["pause", "resume", "model", "restart", "retire"] as const;
 export type AgentMenuOp = (typeof AGENT_MENU_OPS)[number];
 
@@ -202,7 +202,7 @@ export function homeView(h: HomeInput): unknown {
     blocks.push({
       type: "section",
       text: mrkdwn(w.text),
-      accessory: button(S.home.open, "home_open", String(w.renderId)),
+      accessory: button(S.home.open, `home_open:${w.renderId}`, String(w.renderId)),
     });
   }
   blocks.push(divider(), section(`*${S.home.projects}*`));
@@ -210,7 +210,7 @@ export function homeView(h: HomeInput): unknown {
     blocks.push({
       type: "section",
       text: mrkdwn(p.name),
-      accessory: button(S.home.go, "home_go", p.channel),
+      accessory: button(S.home.go, `home_go:${p.slug}`, p.channel),
     });
   }
   const parked: unknown[] = [];
@@ -220,14 +220,14 @@ export function homeView(h: HomeInput): unknown {
       parked.push({
         type: "section",
         text: mrkdwn(p.text),
-        accessory: button(S.home.openAsTask, "parked_open", String(p.taskId)),
+        accessory: button(S.home.openAsTask, `parked_open:${p.taskId}`, String(p.taskId)),
       });
     }
   }
   blocks.push(divider(), section(`*${S.home.agents}*`));
   const overflow = (name: string) => ({
     type: "overflow",
-    action_id: "agent_menu",
+    action_id: `agent_menu:${name}`,
     options: AGENT_MENU_OPS.map((op) => ({
       text: plain(S.home.overflow[op]),
       value: `${op}:${name}`,

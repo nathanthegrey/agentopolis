@@ -68,10 +68,38 @@ export function splitText(text: string, max: number = LIMITS.sectionText): strin
   return parts;
 }
 
+/**
+ * Slack refuses a payload whose action_ids collide inside a block ("action_id … already
+ * exists", invalid_blocks) and whose block_ids collide inside a message or view. We enforce
+ * the stricter rule of unique action_ids across the whole payload, so a builder can never
+ * produce what the real Slack refuses.
+ */
+export function assertUniqueIds(blocks: unknown[]): void {
+  const blockIds = new Set<string>();
+  const actionIds = new Set<string>();
+  const seeAction = (el: unknown) => {
+    const id = (el as { action_id?: unknown } | null)?.action_id;
+    if (typeof id !== "string") return;
+    if (actionIds.has(id)) throw new Error(`action_id "${id}" already exists`);
+    actionIds.add(id);
+  };
+  for (const b of blocks) {
+    const block = b as { block_id?: unknown; elements?: unknown[]; accessory?: unknown } | null;
+    if (typeof block?.block_id === "string") {
+      if (blockIds.has(block.block_id))
+        throw new Error(`block_id "${block.block_id}" already exists`);
+      blockIds.add(block.block_id);
+    }
+    for (const el of block?.elements ?? []) seeAction(el);
+    if (block?.accessory) seeAction(block.accessory);
+  }
+}
+
 export function assertBlocks(blocks: unknown[], max: number): void {
   if (blocks.length > max) {
     throw new Error(`${blocks.length} blocks exceed the Slack cap of ${max}`);
   }
+  assertUniqueIds(blocks);
 }
 
 export function truncateButton(text: string): string {

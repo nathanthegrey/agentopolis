@@ -51,7 +51,7 @@ describe("askCard", () => {
     const c = askCard({ ...base, options: ["Sì", "No", "Dopo"] });
     expect(c.text).toBe("Procedo?");
     const a = actions(c);
-    expect(a.map((e) => e.action_id)).toEqual(["answer", "answer", "answer"]);
+    expect(a.map((e) => e.action_id)).toEqual(["answer:0", "answer:1", "answer:2"]);
     expect(a.map((e) => e.value)).toEqual(["7:0", "7:1", "7:2"]);
     expect(JSON.stringify(c.blocks)).not.toContain("Più tardi");
     expect(a[0]?.text?.text).toBe("Sì");
@@ -177,7 +177,7 @@ describe("homeView", () => {
     expect(s).toContain("Vai");
     expect(s).toContain("Parcheggiate");
     expect(s).toContain("Apri come compito");
-    expect(s).toContain('"parked_open"');
+    expect(s).toContain('"parked_open:42"');
     expect(s).toContain("Aggiornato alle 18:30");
     expect(s).toContain("Agent 2");
     expect(s).toContain("Assumi");
@@ -189,7 +189,7 @@ describe("homeView", () => {
         accessory?: { action_id: string; options: { value: string; text: { text: string } }[] };
       })[];
     };
-    const row = v.blocks.find((b) => b.accessory?.action_id === "agent_menu");
+    const row = v.blocks.find((b) => b.accessory?.action_id === "agent_menu:a1");
     expect(row?.accessory?.options.map((o) => o.value)).toEqual([
       "pause:a1",
       "resume:a1",

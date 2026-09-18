@@ -1,4 +1,23 @@
-import type { Blocks, Chat, ChatError, Persona, PostArgs, Posted } from "../ports/chat.js";
+import {
+  type Blocks,
+  type Chat,
+  ChatError,
+  type Persona,
+  type PostArgs,
+  type Posted,
+} from "../ports/chat.js";
+import { assertUniqueIds } from "./limits.js";
+
+/** what the real Slack refuses with invalid_blocks: duplicate action_ids / block_ids */
+function refuseInvalidBlocks(blocks: unknown): void {
+  if (!Array.isArray(blocks)) return;
+  try {
+    assertUniqueIds(blocks);
+  } catch (e) {
+    throw new ChatError(`invalid_blocks: ${(e as Error).message}`, "invalid_blocks");
+  }
+}
+const viewBlocks = (view: unknown) => (view as { blocks?: unknown } | null)?.blocks;
 
 export type RecordedCall = { method: keyof Chat; args: unknown };
 
@@ -38,6 +57,7 @@ export class FakeChat implements Chat {
 
   async post(args: PostArgs): Promise<Posted> {
     this.#record("post", args);
+    refuseInvalidBlocks(args.blocks);
     const ts = this.nextTs();
     this.posted.set(ts, { channel: args.channel, persona: args.persona, args });
     return { ts, channel: args.channel };
@@ -56,6 +76,7 @@ export class FakeChat implements Chat {
     blocks?: Blocks;
   }): Promise<void> {
     this.#record("update", args);
+    refuseInvalidBlocks(args.blocks);
     this.#assertMutable(args.ts);
   }
 
@@ -96,14 +117,17 @@ export class FakeChat implements Chat {
 
   async openModal(triggerId: string, view: unknown): Promise<void> {
     this.#record("openModal", { triggerId, view });
+    refuseInvalidBlocks(viewBlocks(view));
   }
 
   async updateModal(viewId: string, view: unknown): Promise<void> {
     this.#record("updateModal", { viewId, view });
+    refuseInvalidBlocks(viewBlocks(view));
   }
 
   async publishHome(user: string, view: unknown): Promise<void> {
     this.#record("publishHome", { user, view });
+    refuseInvalidBlocks(viewBlocks(view));
   }
 
   async setSessionStatus(args: {

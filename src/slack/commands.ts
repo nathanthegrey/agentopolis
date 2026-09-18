@@ -125,7 +125,9 @@ export async function dispatchButton(
     }
     return true;
   };
-  switch (b.actionId) {
+  // action_ids are unique per payload ("answer:0", "agent_menu:leo"); the prefix routes
+  const base = b.actionId.split(":")[0] ?? b.actionId;
+  switch (base) {
     case "answer":
     case "answer_select": {
       const m = /^(\d+):(\d+)$/.exec(b.selected ?? b.value);

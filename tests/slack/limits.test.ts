@@ -1,6 +1,12 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { assertBlocks, LIMITS, splitText, truncateButton } from "../../src/slack/limits.js";
+import {
+  assertBlocks,
+  assertUniqueIds,
+  LIMITS,
+  splitText,
+  truncateButton,
+} from "../../src/slack/limits.js";
 
 const stripFences = (s: string) =>
   s.replaceAll("\n```\n", "").replaceAll("```\n", "").replaceAll("\n```", "").replaceAll("```", "");
@@ -80,5 +86,32 @@ describe("assertBlocks / truncateButton", () => {
     expect(truncateButton("x".repeat(80))).toHaveLength(75);
     expect(truncateButton("x".repeat(80)).endsWith("…")).toBe(true);
     expect(truncateButton("ok")).toBe("ok");
+  });
+  it("refuses duplicate action_ids (inside a block or across blocks) and duplicate block_ids, like Slack", () => {
+    const btn = (id: string) => ({ type: "button", action_id: id });
+    expect(() =>
+      assertUniqueIds([{ type: "actions", elements: [btn("answer"), btn("answer")] }]),
+    ).toThrow(/action_id "answer" already exists/);
+    expect(() =>
+      assertUniqueIds([
+        { type: "section", accessory: btn("open") },
+        { type: "section", accessory: btn("open") },
+      ]),
+    ).toThrow(/"open" already exists/);
+    expect(() =>
+      assertUniqueIds([
+        { type: "section", block_id: "b" },
+        { type: "input", block_id: "b" },
+      ]),
+    ).toThrow(/block_id "b" already exists/);
+    expect(() =>
+      assertUniqueIds([
+        { type: "actions", elements: [btn("a:0"), btn("a:1")] },
+        { type: "section", accessory: btn("a:2") },
+      ]),
+    ).not.toThrow();
+    expect(() => assertBlocks([{ type: "actions", elements: [btn("x"), btn("x")] }], 50)).toThrow(
+      /already exists/,
+    );
   });
 });

@@ -74,7 +74,7 @@ const button = (actionId: string, value: string, extra: Partial<Button> = {}): B
   };
 };
 const menu = (op: string, agent: string) =>
-  button("agent_menu", `${op}:${agent}`, {
+  button(`agent_menu:${agent}`, `${op}:${agent}`, {
     selected: `${op}:${agent}`,
     renderId: undefined,
     epoch: undefined,
@@ -161,7 +161,7 @@ describe("dispatchButton", () => {
   it("routes answer, approve, approve_task, deny with render id and epoch", async () => {
     const chat = new FakeChat();
     const f = fakeDaemon();
-    await dispatchButton(button("answer", "7:1"), f.daemon, chat, ctx);
+    await dispatchButton(button("answer:1", "7:1"), f.daemon, chat, ctx);
     await dispatchButton(button("answer_select", "7:2", { selected: "7:2" }), f.daemon, chat, ctx);
     await dispatchButton(button("approve", "9:3"), f.daemon, chat, ctx);
     await dispatchButton(button("approve_task", "9:3"), f.daemon, chat, ctx);
@@ -218,7 +218,7 @@ describe("dispatchButton", () => {
   it("parked_open, undo_edit and home_hire", async () => {
     const chat = new FakeChat();
     const f = fakeDaemon();
-    await dispatchButton(button("parked_open", "42"), f.daemon, chat, ctx);
+    await dispatchButton(button("parked_open:42", "42"), f.daemon, chat, ctx);
     await dispatchButton(button("undo_edit", "ceo", { renderId: undefined }), f.daemon, chat, ctx);
     await dispatchButton(
       button("undo_edit", "ghost", { renderId: undefined }),
