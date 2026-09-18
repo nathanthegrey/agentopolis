@@ -79,7 +79,7 @@ describe("outbox pump", () => {
     await t.pump.stop();
   });
 
-  it("mentions the owner only on an ask to the owner, at most once per agent per hour", async () => {
+  it("mentions the owner on every ask to the owner, never on a say", async () => {
     const t = setup();
     const c = t.container("C1");
     appendMessage(t.db, t.clock, {
@@ -120,7 +120,7 @@ describe("outbox pump", () => {
     expect(t.posts().map((p) => p.text)).toEqual([
       "nota",
       `<@${OWNER}> domanda?`,
-      "altra?",
+      `<@${OWNER}> altra?`,
       `<@${OWNER}> dopo un'ora?`,
     ]);
     await t.pump.stop();

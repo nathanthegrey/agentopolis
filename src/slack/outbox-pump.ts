@@ -24,7 +24,6 @@ export type Pump = { stop(): Promise<void>; tick(): Promise<number> };
 
 const BACKOFF_MS = [1_000, 5_000, 30_000, 120_000, 600_000];
 const HOLD_MS = 30_000;
-const MENTION_WINDOW_MS = 3_600_000;
 const PERMANENT = new Set([
   "channel_not_found",
   "is_archived",
@@ -39,7 +38,6 @@ type Outcome = { done: true; slackTs: string | null } | { hold: true } | { skip:
 export function startOutboxPump(opts: PumpOptions): Pump {
   const { db, chat, clock } = opts;
   const lastSentAt = new Map<string, number>();
-  const lastMentionAt = new Map<string, number>();
   const held = new Set<number>();
   let inFlight: Promise<number> | null = null;
   let stopped = false;
@@ -60,13 +58,6 @@ export function startOutboxPump(opts: PumpOptions): Pump {
           payload: event.payload,
         });
     });
-  };
-
-  const mentionAllowed = (agent: string, now: number): boolean => {
-    const last = lastMentionAt.get(agent);
-    if (last !== undefined && now - last < MENTION_WINDOW_MS) return false;
-    lastMentionAt.set(agent, now);
-    return true;
   };
 
   const personaFor = (author: string, snapshot: Snapshot): Persona | undefined => {
@@ -94,9 +85,10 @@ export function startOutboxPump(opts: PumpOptions): Pump {
           .get();
         const channel = container?.slackChannel ?? row.channel;
         if (!channel) return { hold: true };
-        const now = clock.now();
+        // every ask to the owner mentions him; no hourly counter and no quiet hours:
+        // notification timing is Slack's (revised plan, Task 5)
         const mention =
-          message.kind === "ask" && message.to === "owner" && mentionAllowed(message.author, now)
+          message.kind === "ask" && message.to === "owner"
             ? snapshot.config.slack.owner_user_id
             : undefined;
         const text = mention ? `<@${mention}> ${message.body}` : message.body;
