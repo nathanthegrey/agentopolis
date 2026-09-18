@@ -472,7 +472,7 @@ open.
 ### Slash commands
 
 `/agentopolis` (opens Home), `/hire`, `/edit <agent>`, `/pause <agent>`, `/resume <agent>`,
-`/model <agent> <model>`, `/budget <agent> <usd>`, `/costs`, `/status`, `/diag <agent>` (last
+`/model <agent> <model>`, `/budget <agent> <usd>`, `/costs`, `/pulse`, `/diag <agent>` (last
 turn's exit code, stderr tail, run file path), `/rollback` (a select of the last five config
 changes). Each is a daemon action, not an agent turn, answered ephemerally where the answer is
 only for the owner. The same actions live in the Home tab's overflow menus; the commands are the
@@ -525,7 +525,7 @@ dedup, retries, streaming) and set aside because it has no outbound persona supp
 display_information: { name: Agentopolis }
 features:
   bot_user: { display_name: Agentopolis, always_online: true }
-  slash_commands: [/agentopolis, /hire, /edit, /pause, /resume, /model, /budget, /costs, /status, /diag, /rollback]
+  slash_commands: [/agentopolis, /hire, /edit, /pause, /resume, /model, /budget, /costs, /pulse, /diag, /rollback]
 oauth_config.scopes.bot:
   chat:write, chat:write.customize, groups:write, groups:history, groups:read,
   channels:manage, channels:history, channels:read,
@@ -642,7 +642,7 @@ prompt and response content in span events, never attributes); `trace_id` on `tu
 `events`; metrics `turn_duration_seconds`, `wake_to_turn_start_seconds`, `turns_running`,
 `pending_messages`, `outbox_depth`, `outbox_oldest_age_seconds`, `slack_api_errors_total`,
 `cli_exit_code_total`, `turn_cost_microusd_total`, `budget_remaining`, `sqlite_wal_bytes`,
-`cache_hit_ratio`. `/status` prints the gauges; `/diag` the last turn.
+`cache_hit_ratio`. `/pulse` prints the gauges; `/diag` the last turn.
 
 ## 14. Testing
 

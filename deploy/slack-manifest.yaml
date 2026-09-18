@@ -42,7 +42,7 @@ features:
     - command: /costs
       description: Costi stimati del mese per agente
       should_escape: false
-    - command: /status
+    - command: /pulse
       description: Stato del demone e degli agenti
       should_escape: false
     - command: /diag
