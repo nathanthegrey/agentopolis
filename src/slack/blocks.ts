@@ -41,17 +41,12 @@ export type AskCardInput = {
   renderId: number;
   persona: string;
   project: string | undefined;
-  budgetLeftMicro: number;
   question: string;
   options: string[];
 };
 
 export function askCard(a: AskCardInput): Card {
-  const ctx = [
-    S.asks(a.persona),
-    ...(a.project ? [a.project] : []),
-    S.budgetLeft(a.budgetLeftMicro),
-  ].join(" · ");
+  const ctx = [S.asks(a.persona), ...(a.project ? [a.project] : [])].join(" · ");
   // no snooze button and no re-mention: an open ask simply stays open (spec section 9)
   const row =
     a.options.length <= 3
@@ -145,17 +140,12 @@ export function decidedCard(
 export function taskCard(t: {
   title: string;
   state: string;
-  budgetUsedMicro: number;
-  budgetMicro: number;
+  costMicro: number | null;
   agents: string[];
 }): Card {
   return finish(`${t.title} · ${t.state}`, [
     section(`*${t.title}*`),
-    context(
-      S.task.state(t.state),
-      S.task.budget(t.budgetUsedMicro, t.budgetMicro),
-      S.task.agents(t.agents),
-    ),
+    context(S.task.state(t.state), S.task.cost(t.costMicro), S.task.agents(t.agents)),
   ]);
 }
 export const taskCardUpdate = taskCard;
@@ -190,7 +180,6 @@ export function replyButton(renderId: number): Card {
 export type HomeInput = {
   month: string;
   spentMicro: number;
-  budgetMicro: number;
   waiting: { text: string; renderId: number }[];
   projects: { slug: string; name: string; channel: string }[];
   agents: { name: string; display: string; state: string; spentMicro: number }[];
@@ -200,7 +189,7 @@ export type HomeInput = {
 export function homeView(h: HomeInput): unknown {
   const blocks: unknown[] = [
     { type: "header", text: plain(S.home.title) },
-    context(S.home.spend(h.month, h.spentMicro, h.budgetMicro)),
+    context(S.home.spend(h.month, h.spentMicro)),
     section(`*${S.home.waiting}*`),
   ];
   if (h.waiting.length === 0) blocks.push(context(S.home.nothingWaiting));
@@ -226,7 +215,6 @@ export function homeView(h: HomeInput): unknown {
     options: [
       { text: plain(S.home.overflow.pause), value: `pause:${name}` },
       { text: plain(S.home.overflow.model), value: `model:${name}` },
-      { text: plain(S.home.overflow.budget), value: `budget:${name}` },
       { text: plain(S.home.overflow.fire), value: `fire:${name}` },
     ],
   });
@@ -302,12 +290,7 @@ const textInput = (actionId: string, extra: { multiline?: boolean; initial?: str
   ...(extra.initial !== undefined ? { initial_value: extra.initial } : {}),
 });
 
-export function hireModal(d: {
-  roles: string[];
-  projects: string[];
-  models: string[];
-  defaultBudgetUsd?: number;
-}): unknown {
+export function hireModal(d: { roles: string[]; projects: string[]; models: string[] }): unknown {
   return modal(
     "hire",
     S.hire.title,
@@ -317,15 +300,6 @@ export function hireModal(d: {
       input("project", S.hire.project, select("project", d.projects), true),
       input("display", S.hire.display, textInput("display")),
       input("model", S.hire.model, select("model", d.models), true),
-      input(
-        "budget",
-        S.hire.budget,
-        textInput(
-          "budget",
-          d.defaultBudgetUsd === undefined ? {} : { initial: String(d.defaultBudgetUsd) },
-        ),
-        true,
-      ),
     ],
     {},
   );

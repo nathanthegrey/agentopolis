@@ -82,7 +82,6 @@ const actions: DaemonActions = {
   pause: ok,
   resume: ok,
   setModel: ok,
-  setBudget: ok,
   costs: async () => "costi: smoke, nessun turno",
   status: async () => "smoke: demone non in esecuzione",
   diag: async () => "smoke: nessun turno",
@@ -98,7 +97,6 @@ const view = () =>
   homeView({
     month: "smoke",
     spentMicro: 0,
-    budgetMicro: snapshot.config.budgets.company_monthly_usd * 1_000_000,
     waiting: [],
     projects: [...snapshot.projects.values()].map((p) => ({
       slug: p.slug,
@@ -171,7 +169,6 @@ try {
     renderId: 1,
     persona: persona.username,
     project: "agentopolis",
-    budgetLeftMicro: 20_000_000,
     question: "Smoke: quale bottone premi?",
     options: ["Sì", "No"],
   });

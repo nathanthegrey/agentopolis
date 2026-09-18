@@ -3,7 +3,6 @@ import { formatUsd } from "../money.js";
 
 export const S = {
   asks: (persona: string) => `${persona} chiede`,
-  budgetLeft: (micro: number) => `budget ${formatUsd(micro)} $ stimato`,
   confirm: "Conferma",
   choose: "Scegli…",
   chosen: (choice: string, by: string, hhmm: string) =>
@@ -34,14 +33,13 @@ export const S = {
   cancel: "Annulla",
   task: {
     state: (state: string) => `${STATE_GLYPH[state] ?? "▫️"} ${state}`,
-    budget: (used: number, total: number) =>
-      `budget ${formatUsd(used)} / ${formatUsd(total)} $ stimato`,
+    cost: (micro: number | null) =>
+      micro === null ? "costo sconosciuto" : `costo ${formatUsd(micro)} $ stimato`,
     agents: (list: string[]) => (list.length ? `agenti: ${list.join(", ")}` : "nessun agente"),
   },
   home: {
     title: "Agentopolis",
-    spend: (month: string, spent: number, budget: number) =>
-      `${month} · speso ${formatUsd(spent)} $ su ${formatUsd(budget)} $ stimato`,
+    spend: (month: string, spent: number) => `${month} · costo ${formatUsd(spent)} $ stimato`,
     waiting: "Ti aspettano",
     nothingWaiting: "Niente in attesa.",
     open: "Apri",
@@ -54,7 +52,7 @@ export const S = {
     more: (n: number) => `…e altri ${n}`,
     agentLine: (display: string, state: string, spent: number) =>
       `${state} *${display}* · ${formatUsd(spent)} $`,
-    overflow: { pause: "Pausa", model: "Modello", budget: "Budget", fire: "Licenzia" },
+    overflow: { pause: "Pausa", model: "Modello", fire: "Licenzia" },
   },
   hire: {
     title: "Assumi un agente",
@@ -62,7 +60,6 @@ export const S = {
     project: "Progetto",
     display: "Nome mostrato",
     model: "Modello",
-    budget: "Budget mensile (USD)",
     submit: "Assumi",
   },
   edit: {
@@ -71,7 +68,7 @@ export const S = {
     submit: "Salva",
   },
   usage:
-    "Comandi: /agentopolis, /hire, /edit <agente>, /pause <agente>, /resume <agente>, /model <agente> <modello>, /budget <agente> <usd>, /costs, /pulse, /diag <agente>, /rollback",
+    "Comandi: /agentopolis, /hire, /edit <agente>, /pause <agente>, /resume <agente>, /model <agente> <modello>, /costs, /pulse, /diag <agente>, /rollback",
   staleCard: "Questa card è stata superata: guarda quella più recente.",
   unknownAgent: (name: string) => `Non conosco l'agente "${name}".`,
   unknownRole: (name: string) => `Ruolo sconosciuto: ${name}`,
@@ -81,7 +78,6 @@ export const S = {
   paused: (agent: string) => `⏸️ ${agent} è in pausa.`,
   resumed: (agent: string) => `🟢 ${agent} è di nuovo attivo.`,
   modelSet: (agent: string, model: string) => `🟢 ${agent} userà ${model} dal prossimo turno.`,
-  budgetSet: (agent: string, usd: string) => `🟢 Budget mensile di ${agent}: ${usd} $ stimato.`,
   rolledBack: "🟢 Modifica annullata.",
   useHireToFire:
     "Per licenziare usa il menu dell'agente in Home dopo la fetta 6; per ora metti in pausa.",

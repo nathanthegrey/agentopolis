@@ -1,7 +1,6 @@
 // Slash commands, buttons and modal submissions → daemon actions. Every reply that is only
 // for the owner is ephemeral. The actions themselves live behind a port (slice 4).
 import type { Snapshot } from "../config/loader.js";
-import { toMicroUsd } from "../money.js";
 import type { Chat } from "../ports/chat.js";
 import { editModal, hireModal, replyModal } from "./blocks.js";
 import type { Inbound } from "./inbox.js";
@@ -13,7 +12,6 @@ export type HireForm = {
   project: string | undefined;
   display: string;
   model: string | undefined;
-  budgetMicro: number | undefined;
 };
 
 export interface DaemonActions {
@@ -23,7 +21,6 @@ export interface DaemonActions {
   pause(agent: string): Promise<ActionResult>;
   resume(agent: string): Promise<ActionResult>;
   setModel(agent: string, model: string): Promise<ActionResult>;
-  setBudget(agent: string, micro: number): Promise<ActionResult>;
   costs(): Promise<string>;
   status(): Promise<string>;
   diag(agent: string): Promise<string>;
@@ -50,10 +47,6 @@ const EDITABLE = new Set(["SOUL.md", "JOB.md", "MEMORY.md"]);
 
 const say = (chat: Chat, channel: string, user: string, text: string) =>
   chat.postEphemeral({ channel, user, text });
-const positiveUsd = (s: string | null | undefined): number | undefined => {
-  const n = Number((s ?? "").replace(",", "."));
-  return Number.isFinite(n) && n > 0 ? toMicroUsd(n) : undefined;
-};
 
 export async function dispatchCommand(
   c: Command,
@@ -106,13 +99,6 @@ export async function dispatchCommand(
       if (!agent) return;
       if (!arg2) return reply(S.usage);
       return report(await actions.setModel(agent, arg2), S.modelSet(agent, arg2));
-    }
-    case "budget": {
-      const agent = await agentOr(arg1);
-      if (!agent) return;
-      const micro = positiveUsd(arg2);
-      if (micro === undefined) return reply(S.notANumber);
-      return report(await actions.setBudget(agent, micro), S.budgetSet(agent, arg2 ?? ""));
     }
     case "costs":
       return reply(await actions.costs());
@@ -233,16 +219,12 @@ export async function dispatchView(
       if (!ctx.snapshot.roles.has(role)) errors.role = S.unknownRole(role);
       const display = (v.values.display ?? "").trim();
       if (!display) errors.display = S.required;
-      const budgetText = v.values.budget;
-      const budgetMicro = budgetText ? positiveUsd(budgetText) : undefined;
-      if (budgetText && budgetMicro === undefined) errors.budget = S.notANumber;
       if (Object.keys(errors).length) return { response_action: "errors", errors };
       await actions.hire({
         role,
         project: v.values.project ?? undefined,
         display,
         model: v.values.model ?? undefined,
-        budgetMicro,
       });
       return undefined;
     }

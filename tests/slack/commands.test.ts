@@ -30,7 +30,6 @@ function fakeActions(over: Partial<DaemonActions> = {}) {
     pause: rec("pause"),
     resume: rec("resume"),
     setModel: rec("setModel"),
-    setBudget: rec("setBudget"),
     costs: async () => "costi: 12.00 $ stimato",
     status: async () => "tutto ok",
     diag: async (agent) => `diag ${agent}`,
@@ -103,7 +102,6 @@ describe("dispatchCommand", () => {
     await dispatchCommand(command("pause", "ceo"), f.actions, chat, ctx);
     await dispatchCommand(command("resume", "ceo"), f.actions, chat, ctx);
     await dispatchCommand(command("model", "ceo opus"), f.actions, chat, ctx);
-    await dispatchCommand(command("budget", "ceo 25"), f.actions, chat, ctx);
     await dispatchCommand(command("costs"), f.actions, chat, ctx);
     await dispatchCommand(command("pulse"), f.actions, chat, ctx);
     await dispatchCommand(command("diag", "ceo"), f.actions, chat, ctx);
@@ -111,22 +109,19 @@ describe("dispatchCommand", () => {
       { name: "pause", args: ["ceo"] },
       { name: "resume", args: ["ceo"] },
       { name: "setModel", args: ["ceo", "opus"] },
-      { name: "setBudget", args: ["ceo", 25_000_000] },
     ]);
-    expect(ephemerals(chat)).toHaveLength(7);
-    expect(ephemerals(chat)[4]).toBe("costi: 12.00 $ stimato");
-    expect(ephemerals(chat)[5]).toBe("tutto ok");
+    expect(ephemerals(chat)).toHaveLength(6);
+    expect(ephemerals(chat)[3]).toBe("costi: 12.00 $ stimato");
+    expect(ephemerals(chat)[4]).toBe("tutto ok");
   });
   it("unknown agents, bad arguments and unknown commands get an Italian ephemeral, no action", async () => {
     const chat = new FakeChat();
     const f = fakeActions();
     await dispatchCommand(command("pause", "ghost"), f.actions, chat, ctx);
-    await dispatchCommand(command("budget", "ceo molti"), f.actions, chat, ctx);
     await dispatchCommand(command("dance"), f.actions, chat, ctx);
     expect(f.calls).toEqual([]);
     expect(ephemerals(chat)[0]).toMatch(/Non conosco l'agente "ghost"/);
-    expect(ephemerals(chat)[1]).toMatch(/numero/);
-    expect(ephemerals(chat)[2]).toMatch(/Comandi:/);
+    expect(ephemerals(chat)[1]).toMatch(/Comandi:/);
   });
 });
 
@@ -192,11 +187,7 @@ describe("dispatchView", () => {
   it("a valid hire form calls hire with parsed fields", async () => {
     const f = fakeActions();
     const r = await dispatchView(
-      view(
-        "hire",
-        {},
-        { role: "ceo", project: null, display: "Bea · CEO", model: null, budget: "30" },
-      ),
+      view("hire", {}, { role: "ceo", project: null, display: "Bea · CEO", model: null }),
       f.actions,
       new FakeChat(),
       ctx,
@@ -210,15 +201,14 @@ describe("dispatchView", () => {
           project: undefined,
           display: "Bea · CEO",
           model: undefined,
-          budgetMicro: 30_000_000,
         },
       ],
     });
   });
-  it("an unknown role or a bad budget returns an errors response and calls nothing", async () => {
+  it("an unknown role or an empty display returns an errors response and calls nothing", async () => {
     const f = fakeActions();
     const r = await dispatchView(
-      view("hire", {}, { role: "wizard", display: "", budget: "tanti" }),
+      view("hire", {}, { role: "wizard", display: "" }),
       f.actions,
       new FakeChat(),
       ctx,
@@ -228,7 +218,6 @@ describe("dispatchView", () => {
       errors: {
         role: "Ruolo sconosciuto: wizard",
         display: "Campo obbligatorio",
-        budget: "Serve un numero positivo",
       },
     });
     expect(f.calls).toEqual([]);

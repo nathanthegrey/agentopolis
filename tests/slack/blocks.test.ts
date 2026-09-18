@@ -42,7 +42,6 @@ describe("askCard", () => {
     renderId: 7,
     persona: "Ada",
     project: "agentopolis",
-    budgetLeftMicro: 12_500_000,
     question: "Procedo?",
   };
   it("renders up to three options as buttons plus Più tardi, with render id and index in the value", () => {
@@ -56,7 +55,7 @@ describe("askCard", () => {
     const ctx = blocksOf(c).find((b) => b.type === "context");
     expect(JSON.stringify(ctx)).toContain("Ada chiede");
     expect(JSON.stringify(ctx)).toContain("agentopolis");
-    expect(JSON.stringify(ctx)).toContain("12.50");
+    expect(JSON.stringify(ctx)).not.toMatch(/budget/i);
   });
   it("uses a static_select and Conferma beyond three options", () => {
     const c = askCard({ ...base, options: ["a", "b", "c", "d"] });
@@ -114,19 +113,18 @@ describe("approvalCard", () => {
 });
 
 describe("task card, status line, receipt, reply", () => {
-  it("taskCard shows title, state, budget used over budget, agents", () => {
+  it("taskCard shows title, state, cost so far (stimato) and agents; no budget", () => {
     const c = taskCard({
       title: "Fix login",
       state: "in corso",
-      budgetUsedMicro: 1_500_000,
-      budgetMicro: 5_000_000,
+      costMicro: 1_500_000,
       agents: ["Nina · developer"],
     });
     const s = JSON.stringify(c.blocks);
     expect(c.text).toContain("Fix login");
     expect(s).toContain("🟡 in corso");
-    expect(s).toContain("1.50");
-    expect(s).toContain("5.00");
+    expect(s).toContain("costo 1.50 $ stimato");
+    expect(s).not.toMatch(/budget/i);
     expect(s).toContain("Nina · developer");
   });
   it("statusLine and receipt are single lines with duration and estimated cost", () => {
@@ -157,12 +155,11 @@ describe("homeView", () => {
   const base = {
     month: "settembre 2026",
     spentMicro: 42_000_000,
-    budgetMicro: 300_000_000,
     waiting: [{ text: "Leo chiede", renderId: 3 }],
     projects: [{ slug: "agentopolis", name: "Agentopolis", channel: "C2" }],
     updatedAt: AT,
   };
-  it("renders header, budget, waiting, projects, agents and the update time", () => {
+  it("renders header, cost (stimato, no budget bar), waiting, projects, agents and the update time", () => {
     const v = homeView({ ...base, agents: [agent(1), agent(2)] }) as {
       type: string;
       blocks: Block[];
@@ -170,7 +167,7 @@ describe("homeView", () => {
     expect(v.type).toBe("home");
     const s = JSON.stringify(v.blocks);
     expect(s).toContain("42.00");
-    expect(s).toContain("300.00");
+    expect(s).not.toMatch(/budget|300\.00/);
     expect(s).toContain("Ti aspettano");
     expect(s).toContain("Apri");
     expect(s).toContain("Vai");
