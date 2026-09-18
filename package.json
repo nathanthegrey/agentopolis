@@ -14,7 +14,8 @@
     "db:generate": "drizzle-kit generate",
     "agentopolis": "tsx src/cli/main.ts",
     "test:live": "AGENTOPOLIS_LIVE=1 vitest run tests/contract",
-    "live:checks": "tsx tools/live-checks/run.ts"
+    "live:checks": "tsx tools/live-checks/run.ts",
+    "slack:smoke": "tsx tools/slack-smoke/run.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
