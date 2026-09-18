@@ -78,6 +78,14 @@ export const S = {
   unknownRole: (name: string) => `Ruolo sconosciuto: ${name}`,
   required: "Campo obbligatorio",
   notANumber: "Serve un numero positivo",
+  failed: "Non ci sono riuscito",
+  paused: (agent: string) => `⏸️ ${agent} è in pausa.`,
+  resumed: (agent: string) => `🟢 ${agent} è di nuovo attivo.`,
+  modelSet: (agent: string, model: string) => `🟢 ${agent} userà ${model} dal prossimo turno.`,
+  budgetSet: (agent: string, usd: string) => `🟢 Budget mensile di ${agent}: ${usd} $ stimato.`,
+  rolledBack: "🟢 Modifica annullata.",
+  useHireToFire:
+    "Per licenziare usa il menu dell'agente in Home dopo la fetta 6; per ora metti in pausa.",
   duration: (seconds: number) =>
     seconds < 60 ? `${seconds} s` : `${Math.round(seconds / 60)} min`,
 } as const;
