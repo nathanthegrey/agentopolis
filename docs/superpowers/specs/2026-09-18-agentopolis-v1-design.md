@@ -691,8 +691,9 @@ All of these hold on the VPS, with the real CLI and the owner's Slack workspace:
 ## 16. Stack
 
 TypeScript on Node LTS, pnpm, Bolt for JavaScript (Socket Mode), better-sqlite3 + Drizzle,
-zod + yaml, chokidar, croner, p-limit, pino, `@opentelemetry/*`, sd-notify, vitest, fast-check,
-Biome, Litestream, a systemd unit under `deploy/`. No agent framework and no Claude SDK: the
+zod + yaml, chokidar, croner, p-limit, pino, `@opentelemetry/*`, sd-notify,
+`@modelcontextprotocol/sdk` (the per-turn MCP server only), vitest, fast-check, Biome,
+Litestream, a systemd unit under `deploy/`. No agent framework and no Claude SDK: the
 daemon is a direct NDJSON peer of the CLI. One package; folders `src/<module>/` mirror section 3.
 
 ## 17. Assumptions to confirm with the owner
