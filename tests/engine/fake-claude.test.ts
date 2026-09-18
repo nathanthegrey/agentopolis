@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { spawnLines } from "../../src/engine/process.js";
-import { FAKE, FIXTURES } from "./helpers.js";
+import { expectGone, FAKE, FIXTURES } from "./helpers.js";
 
 const SESSION = "11111111-1111-4111-8111-111111111111";
 
@@ -120,7 +120,6 @@ describe("fake-claude", () => {
     const g = (parsed(f.lines).find((m) => "grandchild" in m) as { grandchild: number }).grandchild;
     await f.h.stop(200);
     expect((await f.h.closed).signal).toBe("SIGKILL");
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(() => process.kill(g, 0)).toThrow(/ESRCH/);
+    await expectGone(g);
   });
 });

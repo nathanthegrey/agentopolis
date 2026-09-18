@@ -41,3 +41,18 @@ export function makeSpec(overrides: Partial<TurnSpec> = {}): TurnSpec {
     ...overrides,
   };
 }
+
+/** Polls every 50 ms, up to `timeoutMs`, until `pid` is gone (kill(pid, 0) throws ESRCH). */
+export async function expectGone(pid: number, timeoutMs = 2_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      process.kill(pid, 0);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ESRCH") return;
+      throw e;
+    }
+    if (Date.now() > deadline) throw new Error(`process ${pid} still alive after ${timeoutMs} ms`);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}

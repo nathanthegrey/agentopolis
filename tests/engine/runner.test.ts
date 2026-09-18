@@ -14,7 +14,7 @@ import type {
   RateLimitInfo,
   TurnSpec,
 } from "../../src/ports/runner.js";
-import { FAKE, FIXTURES, makeSpec, SESSION } from "./helpers.js";
+import { expectGone, FAKE, FIXTURES, makeSpec, SESSION } from "./helpers.js";
 
 function setup(fixture: string, overrides: Partial<TurnSpec> = {}) {
   const runsDir = mkdtempSync(join(tmpdir(), "runs-"));
@@ -161,8 +161,7 @@ describe("CliRunner", () => {
       .split("\n")
       .find((l) => l.includes("grandchild"));
     const g = (JSON.parse(line ?? "{}") as { grandchild: number }).grandchild;
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(() => process.kill(g, 0)).toThrow(/ESRCH/);
+    await expectGone(g);
   });
 
   it("no-session on --resume: failed with the CLI's message", async () => {

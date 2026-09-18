@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { spawnLines } from "../../src/engine/process.js";
+import { expectGone } from "./helpers.js";
 
 const child = (name: string) =>
   fileURLToPath(new URL(`../fixtures/children/${name}`, import.meta.url));
@@ -93,8 +94,7 @@ describe("spawnLines", () => {
     expect(Date.now() - started).toBeLessThan(1_500);
     expect(r.signal).toBe("SIGKILL");
     // the grandchild `sleep 60` was in the same process group and must be gone
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(() => process.kill(grandchild, 0)).toThrow(/ESRCH/);
+    await expectGone(grandchild);
   });
 
   it("stop() on a child that already exited resolves without throwing", async () => {
