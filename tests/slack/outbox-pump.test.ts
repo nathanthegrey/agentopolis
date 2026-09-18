@@ -33,13 +33,17 @@ function setup(opts: { snapshot?: Snapshot; chat?: FakeChat } = {}) {
     tickMs: 0,
     log: () => {},
   });
-  const container = (slackChannel: string | null, slackThreadTs: string | null = null) =>
+  const container = (
+    slackChannel: string | null,
+    slackThreadTs: string | null = null,
+    extra: { kind?: "dm" | "standing" | "task"; defaultTo?: string } = {},
+  ) =>
     db.orm
       .insert(containers)
       .values({
-        kind: "standing",
-        members: ["ceo", "owner"],
-        defaultTo: "ceo",
+        kind: extra.kind ?? "standing",
+        members: [extra.defaultTo ?? "ceo", "owner"],
+        defaultTo: extra.defaultTo ?? "ceo",
         slackChannel,
         slackThreadTs,
       })
@@ -57,7 +61,7 @@ function setup(opts: { snapshot?: Snapshot; chat?: FakeChat } = {}) {
 }
 
 describe("outbox pump", () => {
-  it("mirrors a message with the agent's persona into the container's thread and records mirror.sent", async () => {
+  it("a standing agent posts through its own app as itself into the container's thread; mirror.sent records the app", async () => {
     const t = setup();
     const c = t.container("C1", "1700.5");
     appendMessage(t.db, t.clock, {
@@ -72,7 +76,14 @@ describe("outbox pump", () => {
     expect(p?.channel).toBe("C1");
     expect(p?.threadTs).toBe("1700.5");
     expect(p?.text).toBe("ciao capo");
-    expect(p?.persona?.username).toBe("Jarvis · CEO");
+    expect(p?.persona).toBeUndefined(); // the ceo IS the company app
+    expect(p?.as).toBe("company");
+    const sent = t.db.orm
+      .select()
+      .from(events)
+      .all()
+      .find((e) => e.kind === "mirror.sent");
+    expect(sent?.payload).toMatchObject({ as: "company" });
     expect(t.rows()[0]?.doneAt).toBe(t.clock.now());
     expect(t.rows()[0]?.slackTs).toBe("1700000000.000001");
     expect(t.eventKinds()).toEqual(["message.posted", "mirror.sent"]);
@@ -123,6 +134,44 @@ describe("outbox pump", () => {
       `<@${OWNER}> altra?`,
       `<@${OWNER}> dopo un'ora?`,
     ]);
+    await t.pump.stop();
+  });
+
+  it("a lead posts through her app; a job agent posts through the lead's app as a persona; a DM is served by its app", async () => {
+    const t = setup();
+    const work = t.container("C2", null, { defaultTo: "ada" });
+    appendMessage(t.db, t.clock, {
+      containerId: work,
+      author: "ada",
+      to: "owner",
+      body: "da Ada",
+      kind: "say",
+    });
+    appendMessage(t.db, t.clock, {
+      containerId: work,
+      author: "nina",
+      to: "ada",
+      body: "da Nina",
+      kind: "report",
+    });
+    await t.pump.tick();
+    t.clock.advance(1_000);
+    const dm = t.container("D2", null, { kind: "dm", defaultTo: "ada" });
+    appendMessage(t.db, t.clock, {
+      containerId: dm,
+      author: "daemon",
+      to: "owner",
+      body: "Ada è in pausa",
+      kind: "system",
+    });
+    await t.pump.tick();
+    const posts = t.posts();
+    expect(posts.map((p) => [p.text, p.as, p.persona?.username])).toEqual([
+      ["da Ada", "ada", undefined],
+      ["da Nina", "ada", "Nina · developer"],
+      ["Ada è in pausa", "ada", undefined],
+    ]);
+    expect(posts[1]?.persona?.iconUrl).toBe("https://example.test/nina.png");
     await t.pump.stop();
   });
 
@@ -264,6 +313,7 @@ describe("outbox pump", () => {
     const ts = t.rows()[0]?.slackTs ?? "";
     expect(ts).toBeTruthy();
     expect(t.posts()[0]?.persona).toBeUndefined();
+    expect(t.posts()[0]?.as).toBe("company");
     expect(t.posts()[0]?.blocks).toEqual(blocks);
     t.clock.advance(1_000);
     enqueueOutbox(t.db.orm, t.clock, {
