@@ -1,3 +1,4 @@
+import { desc, sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const agents = sqliteTable("agents", {
@@ -80,7 +81,7 @@ export const turns = sqliteTable(
     cacheCreation: integer("cache_creation"),
     error: text("error"),
   },
-  (t) => [index("turns_agent_started").on(t.agent, t.startedAt)],
+  (t) => [index("turns_agent_started").on(t.agent, desc(t.startedAt))],
 );
 
 export const requests = sqliteTable(
@@ -141,7 +142,7 @@ export const outbox = sqliteTable(
     slackTs: text("slack_ts"),
     createdAt: integer("created_at").notNull(),
   },
-  (t) => [index("outbox_next_attempt").on(t.nextAttemptAt)],
+  (t) => [index("outbox_next_attempt").on(t.nextAttemptAt).where(sql`done_at is null`)],
 );
 
 export const inbox = sqliteTable(

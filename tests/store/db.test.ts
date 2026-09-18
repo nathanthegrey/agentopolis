@@ -35,6 +35,19 @@ describe("openDatabase", () => {
     ]);
     db.close();
   });
+  it("has a partial outbox index and a descending turns index", () => {
+    const file = join(mkdtempSync(join(tmpdir(), "db-")), "a.db");
+    const db = openDatabase(file);
+    const indexSql = (name: string) =>
+      (
+        db.sqlite
+          .prepare("select sql from sqlite_master where type='index' and name=?")
+          .get(name) as { sql: string } | undefined
+      )?.sql ?? "";
+    expect(indexSql("outbox_next_attempt")).toMatch(/where\s+done_at\s+is\s+null/i);
+    expect(indexSql("turns_agent_started")).toMatch(/started_at.*desc/i);
+    db.close();
+  });
   it("is idempotent: opening twice applies nothing new", () => {
     const file = join(mkdtempSync(join(tmpdir(), "db-")), "a.db");
     openDatabase(file).close();
