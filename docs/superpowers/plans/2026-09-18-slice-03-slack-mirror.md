@@ -309,7 +309,7 @@ and in a comment at the top of `app.ts`.
 **Behaviour (guarded by `AGENTOPOLIS_LIVE=1`, reads the two tokens and `AGENTOPOLIS_OWNER`
 from the environment, uses a temporary home from `examples/home`):** connect in Socket Mode;
 `ensureChannels`; the ceo posts in its DM with the owner ("Ciao, sono Jarvis") through the
-company app; the lead posts "Ciao, sono Leo" in its own DM through its app; a persona message
+company app; the lead posts "Ciao, sono Ada" in its own DM through its app; a persona message
 ("Nina · developer") is posted in `#agentopolis-work` through the lead's app; post an `askCard`
 with two options in the ceo DM; wait up to 120 s for the owner to click, then rewrite it as `answeredCard`; open
 nothing (a modal needs a trigger, which comes from the owner: print the instruction "digita

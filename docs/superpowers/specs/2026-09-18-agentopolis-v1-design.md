@@ -202,13 +202,13 @@ list with `--agents` as JSON. v1 ships `research` (read-only, web fetch and sear
 ### agent.yaml (a standing instance)
 
 ```yaml
-name: agentopolis-lead    # internal id
-display: Leo · lead Agentopolis
+name: ada                 # internal id
+display: Ada · lead Agentopolis
 avatar: https://…/leo.png
 role: lead
 project: agentopolis
 reports_to: ceo
-slack_app: leo            # standing agents name their app; the ceo uses `company`
+slack_app: ada            # standing agents name their app; the ceo uses `company`
 model: null               # null = role default
 effort: null
 paused: false
@@ -225,7 +225,7 @@ repo: /home/orch/src/agentopolis
 branches:
   work: dev
   production: master      # merges and pushes here always need the owner's button
-lead: agentopolis-lead
+lead: ada
 ```
 
 ### config.yaml
@@ -236,7 +236,7 @@ slack:
   work_channel_suffix: -work
   apps:                                 # one Socket Mode connection each; secrets stay in the environment
     company: { bot_token_env: SLACK_BOT_TOKEN, app_token_env: SLACK_APP_TOKEN }
-    leo:     { bot_token_env: SLACK_BOT_TOKEN_LEO, app_token_env: SLACK_APP_TOKEN_LEO }
+    ada:     { bot_token_env: SLACK_BOT_TOKEN_ADA, app_token_env: SLACK_APP_TOKEN_ADA }
 language: it                            # fallback only: agents answer in the owner's language
 approvals:
   timeout_hours: 24                     # merge_production never expires
@@ -719,8 +719,11 @@ direct NDJSON peer of the CLI. One package; folders `src/<module>/` mirror secti
 ## 17. Assumptions to confirm with the owner
 
 - The first project is this repository.
-- Standing agents have display names chosen at hire ("Leo · lead Agentopolis"); job agents get a
-  display name from `config.job_names` with their internal id kept.
+- Standing agents' names, chosen by the owner on 2026-09-19: **Jarvis** (ceo), **Ada** (lead
+  Agentopolis), **Penny** (lead Fincanva), **Giano** (lead Ianus). Their Slack apps carry the same
+  names; token env vars are `SLACK_BOT_TOKEN`/`SLACK_APP_TOKEN` for Jarvis (the company app)
+  and `SLACK_BOT_TOKEN_ADA`, `_PENNY`, `_GIANO` for the leads. Job agents get a display name
+  from `config.job_names` with their internal id kept.
 - Slack free plan for now (90-day history is acceptable: the store keeps everything; the agent
   features of section 9 may need a paid plan and are never required).
 
