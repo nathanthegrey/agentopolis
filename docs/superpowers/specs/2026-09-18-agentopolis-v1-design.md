@@ -28,7 +28,7 @@ all happen; the agents' engine is the Claude Code CLI on the owner's subscriptio
   `scout`, `designer`.
 - Addressed messages, mirrored to Slack: a channel per standing agent, a thread per task, the
   owner a member of all of them.
-- Approvals with buttons; per-agent budgets; pause; one question at a time; quiet hours.
+- Approvals with buttons; per-agent budgets; pause; quiet hours.
 - One project: this repository. The company's first work is its own v2.
 
 ### Out of v1
@@ -54,7 +54,7 @@ why this is a recorded road and not a closed door).
    an approval came back, or a schedule it declared fired. There is no heartbeat, and no probe
    loop: even the subscription limit is read from an event the CLI emits on every turn (13).
 4. **The daemon enforces; prose advises.** Anything that must hold (approvals, budgets, pause,
-   one question at a time, production branches) is enforced where the agent can only ask: a
+   production branches) is enforced where the agent can only ask: a
    `PreToolUse` hook for absolutes, the permission channel for judgement calls, the daemon's own
    git operations for branches. Role prose explains the rule; it never carries it alone.
 5. **Numbers are measured or absent, and cost figures are estimates.** Costs come from the CLI's
@@ -120,7 +120,7 @@ Modules, each one job, each behind a port with a permanent fake (`Store`, `Clock
   the daemon is the only writer; migrations generated and applied at boot in a transaction; boot
   refuses a database newer than the binary.
 - **router**: turns a posted message into a wake for its addressee, applying pause, budget and
-  the question hold (all derived from rows, never from in-memory flags).
+  the mention budget (all derived from rows, never from in-memory flags).
 - **scheduler**: one `AgentLoop` per agent (dirty flag + async mutex; a wake during a turn marks
   dirty and the loop runs again, reading everything pending, which is coalescing for free); a
   global concurrency cap (`p-limit`, 2–3 on the VPS); declared cron schedules (croner).
@@ -226,7 +226,6 @@ slack:
   owner_user_id: U0123ABCD
   work_channel_suffix: -work
 language: it                            # fallback only: agents answer in the owner's language
-max_open_asks_per_agent: 1
 budgets:
   company_monthly_usd: 300
 approvals:
@@ -268,8 +267,8 @@ plain and the query is `NOT EXISTS`); `messages(container_id, id)`; partial
 `version` hashes paths relative to the home folder, so the same content gives the same version
 on every machine.
 
-The question hold is **derived**: "an unanswered `ask` from this agent to the owner exists",
-never a flag that a crash could leave set.
+"Open asks" (for the Home tab and the mention budget) are **derived**: "an unanswered `ask` from
+this agent to the owner exists", never a flag that a crash could leave set.
 
 ## 6. Messaging
 
@@ -286,11 +285,11 @@ never a flag that a crash could leave set.
   the button goes to the member with an open `ask` there; if none, to the container's default
   addressee (the agent of a standing channel, the lead of a task thread); a leading word
   overrides: `lead: …`, `dev: …`, `reviewer: …`, `ceo: …`.
-- **Open questions to the owner are capped per agent** (`config.max_open_asks_per_agent`,
-  default 1). An agent at the cap has its further messages to the owner held in the store (not
-  mirrored) until the owner answers or an ask expires; its work and its messages to other agents
-  are never held. The Home tab shows "N domande in attesa". Role prose teaches agents to group
-  independent questions into one card and to ask only what blocks.
+- **Questions to the owner are never capped or held** (owner, 2026-09-18: a one-at-a-time
+  rule was an inheritance from a linear chat, not a need here). Every `ask` is its own tracked
+  card, answerable in any order, listed in the Home tab as "N domande in attesa", snoozable and
+  expiring. What limits noise is the mention budget below; what limits asking is role prose:
+  ask only what blocks, group independent questions into one card.
 - **Mentions are rationed.** `<@owner>` is attached only to `ask`, approval cards and failures,
   never to `say` or `report`; at most one mention per agent per hour, further ones edit the
   existing card. During quiet hours nobody is mentioned; the morning digest opens with "Mentre
@@ -374,7 +373,7 @@ token from its environment); it holds no state and never opens SQLite. Tools:
 | tool | who | what |
 |---|---|---|
 | `post(container, to, body, kind)` | all | append + mirror + wake the addressee; `kind` in say/ask/report; `to` is a member name or `owner` |
-| `answer(message_id, body)` | all | a `say` linked to an `ask`, clears the question hold |
+| `answer(message_id, body)` | all | a `say` linked to an `ask`, which marks the ask answered |
 | `read_channel(container, since)` | all | back-scroll only: messages after an id; new messages already arrive in the turn prompt |
 | `request(kind, payload)` | per role | ask the daemon: `open_task`, `close_task`, `hire`, `retire`, `pause`, `set_budget`, `merge_production`, `run_schedule` |
 | `remember(text)` | standing | append to my MEMORY.md (committed) and echo the line into my next turn prompt, so it applies before the next session rotation |
@@ -649,7 +648,7 @@ prompt and response content in span events, never attributes); `trace_id` on `tu
 
 ## 14. Testing
 
-- **Unit** (vitest): loader validation, router wake rules, derived question hold, budget
+- **Unit** (vitest): loader validation, router wake rules, derived open-ask state, budget
   arithmetic in integers, approval state machine and epochs, stream parser (every message type,
   unknown types ignored, broken lines skipped), Slack block builders, limits module, prompt
   composition order.
