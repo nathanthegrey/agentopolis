@@ -1,12 +1,16 @@
 import {
+  type AppName,
   type Blocks,
   type Chat,
   ChatError,
+  COMPANY_APP,
   type Persona,
   type PostArgs,
   type Posted,
 } from "../ports/chat.js";
 import { assertUniqueIds } from "./limits.js";
+
+export type RecordedCall = { method: keyof Chat; args: unknown };
 
 /** what the real Slack refuses with invalid_blocks: duplicate action_ids / block_ids */
 function refuseInvalidBlocks(blocks: unknown): void {
@@ -19,24 +23,25 @@ function refuseInvalidBlocks(blocks: unknown): void {
 }
 const viewBlocks = (view: unknown) => (view as { blocks?: unknown } | null)?.blocks;
 
-export type RecordedCall = { method: keyof Chat; args: unknown };
-
 /**
- * The permanent fake for the Chat port: records every call, hands out increasing ts values,
- * can fail the next call of a method once, and enforces the one rule the real Slack cannot
- * enforce for us: a message posted with a persona is never updated or deleted.
+ * The permanent fake for the Chat port: records every call (with the app it was made `as`),
+ * hands out increasing ts values, can fail the next call of a method once, refuses what
+ * Slack refuses (duplicate ids, a taken channel name), and enforces the one rule the real
+ * Slack cannot enforce for us: a message posted with a persona is never updated or deleted.
  */
 export class FakeChat implements Chat {
   readonly calls: RecordedCall[] = [];
   readonly posted = new Map<
     string,
-    { channel: string; persona: Persona | undefined; args: PostArgs }
+    { channel: string; persona: Persona | undefined; as: AppName; args: PostArgs }
   >();
   readonly channels = new Map<string, string>(); // name → id, created through this fake
   /** channels that "already exist" in the workspace before the test starts */
   readonly preexisting: { id: string; name: string }[];
+  readonly dms = new Map<string, string>(); // `${app}:${user}` → id
   #ts = 0;
   #channelSeq = 0;
+  #dmSeq = 0;
   readonly #failures = new Map<keyof Chat, ChatError>();
 
   constructor(opts: { preexisting?: { id: string; name: string }[] } = {}) {
@@ -65,7 +70,12 @@ export class FakeChat implements Chat {
     this.#record("post", args);
     refuseInvalidBlocks(args.blocks);
     const ts = this.nextTs();
-    this.posted.set(ts, { channel: args.channel, persona: args.persona, args });
+    this.posted.set(ts, {
+      channel: args.channel,
+      persona: args.persona,
+      as: args.as ?? COMPANY_APP,
+      args,
+    });
     return { ts, channel: args.channel };
   }
 
@@ -80,13 +90,14 @@ export class FakeChat implements Chat {
     ts: string;
     text: string;
     blocks?: Blocks;
+    as?: AppName;
   }): Promise<void> {
     this.#record("update", args);
     refuseInvalidBlocks(args.blocks);
     this.#assertMutable(args.ts);
   }
 
-  async delete(args: { channel: string; ts: string }): Promise<void> {
+  async delete(args: { channel: string; ts: string; as?: AppName }): Promise<void> {
     this.#record("delete", args);
     this.#assertMutable(args.ts);
     this.posted.delete(args.ts);
@@ -97,12 +108,13 @@ export class FakeChat implements Chat {
     user: string;
     text: string;
     blocks?: Blocks;
+    as?: AppName;
   }): Promise<void> {
     this.#record("postEphemeral", args);
   }
 
-  async createPrivateChannel(name: string): Promise<{ id: string }> {
-    this.#record("createPrivateChannel", name);
+  async createPrivateChannel(name: string, as: AppName = COMPANY_APP): Promise<{ id: string }> {
+    this.#record("createPrivateChannel", { name, as });
     if (this.channels.has(name) || this.preexisting.some((c) => c.name === name)) {
       throw new ChatError("name_taken", "name_taken");
     }
@@ -112,35 +124,51 @@ export class FakeChat implements Chat {
     return { id };
   }
 
-  async listPrivateChannels(): Promise<{ id: string; name: string }[]> {
-    this.#record("listPrivateChannels", undefined);
+  async listPrivateChannels(as: AppName = COMPANY_APP): Promise<{ id: string; name: string }[]> {
+    this.#record("listPrivateChannels", { as });
     return [...this.preexisting, ...[...this.channels].map(([name, id]) => ({ id, name }))];
   }
 
-  async invite(channel: string, users: string[]): Promise<void> {
-    this.#record("invite", { channel, users });
+  async openDm(userId: string, as: AppName = COMPANY_APP): Promise<{ id: string }> {
+    this.#record("openDm", { userId, as });
+    const key = `${as}:${userId}`;
+    const existing = this.dms.get(key);
+    if (existing) return { id: existing };
+    this.#dmSeq += 1;
+    const id = `D${String(this.#dmSeq).padStart(3, "0")}`;
+    this.dms.set(key, id);
+    return { id };
   }
 
-  async archive(channel: string): Promise<void> {
-    this.#record("archive", channel);
+  async botUserId(as: AppName = COMPANY_APP): Promise<string> {
+    this.#record("botUserId", { as });
+    return `UB_${as.toUpperCase()}`;
   }
 
-  async setTopic(channel: string, topic: string): Promise<void> {
-    this.#record("setTopic", { channel, topic });
+  async invite(channel: string, users: string[], as: AppName = COMPANY_APP): Promise<void> {
+    this.#record("invite", { channel, users, as });
   }
 
-  async openModal(triggerId: string, view: unknown): Promise<void> {
-    this.#record("openModal", { triggerId, view });
+  async archive(channel: string, as: AppName = COMPANY_APP): Promise<void> {
+    this.#record("archive", { channel, as });
+  }
+
+  async setTopic(channel: string, topic: string, as: AppName = COMPANY_APP): Promise<void> {
+    this.#record("setTopic", { channel, topic, as });
+  }
+
+  async openModal(triggerId: string, view: unknown, as: AppName = COMPANY_APP): Promise<void> {
+    this.#record("openModal", { triggerId, view, as });
     refuseInvalidBlocks(viewBlocks(view));
   }
 
-  async updateModal(viewId: string, view: unknown): Promise<void> {
-    this.#record("updateModal", { viewId, view });
+  async updateModal(viewId: string, view: unknown, as: AppName = COMPANY_APP): Promise<void> {
+    this.#record("updateModal", { viewId, view, as });
     refuseInvalidBlocks(viewBlocks(view));
   }
 
-  async publishHome(user: string, view: unknown): Promise<void> {
-    this.#record("publishHome", { user, view });
+  async publishHome(user: string, view: unknown, as: AppName = COMPANY_APP): Promise<void> {
+    this.#record("publishHome", { user, view, as });
     refuseInvalidBlocks(viewBlocks(view));
   }
 
@@ -149,6 +177,7 @@ export class FakeChat implements Chat {
     threadTs?: string;
     status: "active" | "processing";
     persona?: Persona;
+    as?: AppName;
   }): Promise<void> {
     this.#record("setSessionStatus", args);
   }
@@ -159,6 +188,7 @@ export class FakeChat implements Chat {
     filename: string;
     content: Buffer;
     title: string;
+    as?: AppName;
   }): Promise<void> {
     this.#record("upload", { ...args, content: `<${args.content.length} bytes>` });
   }

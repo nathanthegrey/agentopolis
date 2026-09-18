@@ -16,7 +16,9 @@ if (!home.ok) throw new Error("fixture");
 const OWNER = home.snapshot.config.slack.owner_user_id;
 const fresh = () => openDatabase(join(mkdtempSync(join(tmpdir(), "boot-")), "a.db"));
 const creates = (chat: FakeChat) =>
-  chat.calls.filter((c) => c.method === "createPrivateChannel").map((c) => c.args);
+  chat.calls
+    .filter((c) => c.method === "createPrivateChannel")
+    .map((c) => (c.args as { name: string }).name);
 const eventKinds = (db: ReturnType<typeof fresh>) =>
   db.orm
     .select()

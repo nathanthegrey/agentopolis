@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { FakeClock } from "../../src/ports/clock.js";
-import { createSlackApp } from "../../src/slack/app.js";
+import { createSlackApps, type InboundContext } from "../../src/slack/app.js";
 import type { Inbound } from "../../src/slack/inbox.js";
 import { openDatabase } from "../../src/store/db.js";
 import { inbox } from "../../src/store/schema.js";
@@ -12,16 +12,18 @@ const OWNER = "U0123ABCD";
 
 function setup() {
   const db = openDatabase(join(mkdtempSync(join(tmpdir(), "app-")), "a.db"));
-  const received: { inbound: Inbound; rowsAtDelivery: number }[] = [];
-  const s = createSlackApp({
-    token: "xoxb-not-a-real-token",
-    appToken: "xapp-not-a-real-token",
+  const received: { inbound: Inbound; ctx: InboundContext; rowsAtDelivery: number }[] = [];
+  const s = createSlackApps({
+    apps: {
+      company: { token: "xoxb-not-a-real-token", appToken: "xapp-not-a-real-token" },
+      ada: { token: "xoxb-not-a-real-token-ada", appToken: "xapp-not-a-real-token-ada" },
+    },
     db,
     clock: new FakeClock(1_000),
     ownerUserId: OWNER,
     offline: { botId: "B1", botUserId: "UBOT" },
-    onInbound: (inbound) => {
-      received.push({ inbound, rowsAtDelivery: db.orm.select().from(inbox).all().length });
+    onInbound: (inbound, ctx) => {
+      received.push({ inbound, ctx, rowsAtDelivery: db.orm.select().from(inbox).all().length });
       if (inbound.kind === "view_submitted" && inbound.values.text === "") {
         return { response_action: "errors", errors: { text: "Campo obbligatorio" } };
       }
@@ -32,9 +34,9 @@ function setup() {
   return { s, db, received, rows };
 }
 
-/** Feeds a payload through Bolt exactly as the Socket Mode receiver would. */
+/** Feeds a payload through one Bolt app exactly as its Socket Mode receiver would. */
 async function feed(
-  app: ReturnType<typeof createSlackApp>["app"],
+  app: ReturnType<typeof createSlackApps>["apps"] extends Map<string, infer A> ? A : never,
   body: Record<string, unknown>,
   rows: () => unknown[],
 ) {
@@ -50,45 +52,72 @@ async function feed(
   });
   return { rowsAtAck, ackedWith };
 }
+const appOf = (s: ReturnType<typeof setup>["s"], name: string) => {
+  const app = s.apps.get(name);
+  if (!app) throw new Error(`no app ${name}`);
+  return app;
+};
 
-describe("Slack app listeners (offline, through Bolt's processEvent)", () => {
-  it("a message event is written to the inbox and delivered as owner_message", async () => {
+describe("Slack apps (offline, through Bolt's processEvent)", () => {
+  it("runs one Bolt app per configured app and needs a company app", () => {
+    const t = setup();
+    expect([...t.s.apps.keys()]).toEqual(["company", "ada"]);
+    expect(t.s.chat.apps).toEqual(["company", "ada"]);
+    expect(() =>
+      createSlackApps({
+        apps: { ada: { token: "x", appToken: "y" } },
+        db: t.db,
+        clock: new FakeClock(0),
+        ownerUserId: OWNER,
+        offline: { botId: "B", botUserId: "U" },
+        onInbound: () => undefined,
+      }),
+    ).toThrow(/company/);
+    t.db.close();
+  });
+
+  it("a DM message received by Ada's app is written to the inbox and delivered with via=ada", async () => {
     const t = setup();
     await feed(
-      t.s.app,
+      appOf(t.s, "ada"),
       {
         type: "event_callback",
         event_id: "Ev1",
         team_id: "T1",
-        api_app_id: "A1",
+        api_app_id: "A2",
         event: {
           type: "message",
-          channel: "C1",
+          channel: "D1",
           user: OWNER,
-          text: "ciao",
+          text: "ciao Ada",
           ts: "1700.1",
-          channel_type: "group",
+          channel_type: "im",
         },
       },
       t.rows,
     );
     expect(t.rows()).toHaveLength(1);
-    expect(t.received[0]?.inbound).toMatchObject({ kind: "owner_message", text: "ciao" });
+    expect(t.received[0]?.inbound).toMatchObject({
+      kind: "owner_message",
+      text: "ciao Ada",
+      channel: "D1",
+    });
+    expect(t.received[0]?.ctx.via).toBe("ada");
     expect(t.received[0]?.rowsAtDelivery).toBe(1);
     t.db.close();
   });
 
-  it("a button click is written before it is acked, then delivered", async () => {
+  it("a button click on the company app is written before it is acked, then delivered with via=company", async () => {
     const t = setup();
     const r = await feed(
-      t.s.app,
+      appOf(t.s, "company"),
       {
         type: "block_actions",
         trigger_id: "T9",
         team: { id: "T1" },
         user: { id: OWNER },
         api_app_id: "A1",
-        container: { channel_id: "C1", message_ts: "1700.2" },
+        container: { channel_id: "D0", message_ts: "1700.2" },
         actions: [
           {
             type: "button",
@@ -108,17 +137,18 @@ describe("Slack app listeners (offline, through Bolt's processEvent)", () => {
       renderId: 3,
       epoch: 1,
     });
+    expect(t.received[0]?.ctx.via).toBe("company");
     t.db.close();
   });
 
-  it("a slash command and a view submission follow the same write-then-ack order", async () => {
+  it("a slash command and a view submission follow the same write-then-ack order; errors travel in the ack", async () => {
     const t = setup();
     const c = await feed(
-      t.s.app,
+      appOf(t.s, "company"),
       {
-        command: "/pulse",
-        text: "",
-        channel_id: "C1",
+        command: "/diag",
+        text: "ada",
+        channel_id: "D0",
         user_id: OWNER,
         trigger_id: "T10",
         team_id: "T1",
@@ -127,39 +157,9 @@ describe("Slack app listeners (offline, through Bolt's processEvent)", () => {
       t.rows,
     );
     expect(c.rowsAtAck).toBe(1);
-    expect(t.received[0]?.inbound).toMatchObject({ kind: "command", name: "pulse" });
+    expect(t.received[0]?.inbound).toMatchObject({ kind: "command", name: "diag", text: "ada" });
     const v = await feed(
-      t.s.app,
-      {
-        type: "view_submission",
-        trigger_id: "T11",
-        team: { id: "T1" },
-        user: { id: OWNER },
-        api_app_id: "A1",
-        view: {
-          id: "V1",
-          type: "modal",
-          callback_id: "reply",
-          private_metadata: '{"renderId":5}',
-          state: { values: { text: { text: { type: "plain_text_input", value: "rosso" } } } },
-        },
-      },
-      t.rows,
-    );
-    expect(v.rowsAtAck).toBe(2);
-    expect(t.received[1]?.inbound).toMatchObject({
-      kind: "view_submitted",
-      callbackId: "reply",
-      metadata: { renderId: 5 },
-      values: { text: "rosso" },
-    });
-    t.db.close();
-  });
-
-  it("a view submission with validation errors is acked with the errors response", async () => {
-    const t = setup();
-    const v = await feed(
-      t.s.app,
+      appOf(t.s, "company"),
       {
         type: "view_submission",
         trigger_id: "T12",
@@ -176,7 +176,7 @@ describe("Slack app listeners (offline, through Bolt's processEvent)", () => {
       },
       t.rows,
     );
-    expect(v.rowsAtAck).toBe(1);
+    expect(v.rowsAtAck).toBe(2);
     expect(v.ackedWith).toEqual({
       response_action: "errors",
       errors: { text: "Campo obbligatorio" },

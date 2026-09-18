@@ -92,4 +92,20 @@ describe("FakeChat", () => {
       }),
     ).resolves.toBeTruthy();
   });
+
+  it("records the app a call is made `as` (company by default), opens stable DMs and knows bot user ids", async () => {
+    const chat = new FakeChat();
+    await chat.post({ channel: "D1", text: "ciao", as: "ada" });
+    await chat.post({ channel: "C1", text: "card" });
+    expect(chat.posted.get("1700000000.000001")?.as).toBe("ada");
+    expect(chat.posted.get("1700000000.000002")?.as).toBe("company");
+    const dm1 = await chat.openDm("U1", "ada");
+    const dm2 = await chat.openDm("U1", "ada");
+    const dm3 = await chat.openDm("U1");
+    expect(dm1.id).toBe(dm2.id);
+    expect(dm1.id).not.toBe(dm3.id);
+    expect(await chat.botUserId("ada")).toBe("UB_ADA");
+    expect(await chat.botUserId()).toBe("UB_COMPANY");
+    expect(chat.calls.at(-1)).toEqual({ method: "botUserId", args: { as: "company" } });
+  });
 });

@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { initHome } from "../../src/cli/init.js";
 import { ChatError } from "../../src/ports/chat.js";
 import { SystemClock } from "../../src/ports/clock.js";
-import { createSlackApp } from "../../src/slack/app.js";
+import { createSlackApps } from "../../src/slack/app.js";
 import { answeredCard, askCard, homeView } from "../../src/slack/blocks.js";
 import { ensureChannels } from "../../src/slack/bootstrap.js";
 import { type Daemon, dispatchCommand, dispatchView } from "../../src/slack/commands.js";
@@ -114,9 +114,8 @@ const view = () =>
     updatedAt: clock.now(),
   });
 
-const slack = createSlackApp({
-  token,
-  appToken,
+const slack = createSlackApps({
+  apps: { company: { token, appToken } },
   db,
   clock,
   ownerUserId: owner,
@@ -132,6 +131,12 @@ const slack = createSlackApp({
     return undefined;
   },
 });
+
+const companyClient = () => {
+  const app = slack.apps.get("company");
+  if (!app) throw new Error("no company app");
+  return app.client;
+};
 
 let exitCode = 1;
 try {
@@ -211,7 +216,7 @@ try {
       text: "check 1: messaggio persona, prima dell'update",
       persona,
     });
-    const client = slack.app.client;
+    const client = companyClient();
     const r = (await client.chat.update({
       channel: ceoChannel,
       ts: p.ts,
@@ -226,7 +231,7 @@ try {
   }
   if (CHECKS.has("2")) {
     const parent = await slack.chat.post({ channel: ceoChannel, text: "check 2: thread di prova" });
-    const client = slack.app.client;
+    const client = companyClient();
     for (const [what, call] of [
       [
         "setStatus",
