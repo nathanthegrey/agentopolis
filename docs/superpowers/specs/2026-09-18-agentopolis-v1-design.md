@@ -259,9 +259,12 @@ Times are `INTEGER` epoch milliseconds UTC behind one `Clock` port. Ids are mono
 | `schedules` | declared by standing agents: `agent`, `cron`, `prompt`, `last_fired` |
 | `events` | the audit stream, monotonic id; every state mutation writes its event in the same transaction; a JSONL file is a derived tail, never a second writer |
 
-Indexes: partial on undelivered `messages(to, id)`; `messages(container_id, id)`; partial
+Indexes: `messages(to, id)` ("undelivered" is a join on `turn_messages`, so this index is
+plain and the query is `NOT EXISTS`); `messages(container_id, id)`; partial
 `outbox(next_attempt_at) WHERE done_at IS NULL`; `turns(agent, started_at DESC)`; unique
-`inbox(event_id)`; `inbox(logical_key)`; `requests(status, created_at)`.
+`inbox(event_id)`; `inbox(logical_key)`; `requests(status, created_at)`. The loader's
+`version` hashes paths relative to the home folder, so the same content gives the same version
+on every machine.
 
 The question hold is **derived**: "an unanswered `ask` from this agent to the owner exists",
 never a flag that a crash could leave set.
