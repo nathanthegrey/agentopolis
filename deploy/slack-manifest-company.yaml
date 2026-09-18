@@ -3,7 +3,7 @@
 # Create or update it at api.slack.com/apps → App Manifest → paste → Save → Reinstall.
 display_information:
   name: Jarvis
-  description: CEO of Agentopolis: talk to him about anything concerning the company
+  description: "CEO of Agentopolis: talk to him about anything concerning the company"
   background_color: "#1f2933"
 features:
   app_home:

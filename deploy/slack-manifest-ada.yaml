@@ -3,7 +3,7 @@
 # owner's chat with this agent; it posts in its project's channels and threads as itself.
 display_information:
   name: Ada
-  description: Lead of Agentopolis: builds and maintains the city of agents
+  description: "Lead of Agentopolis: builds and maintains the city of agents"
   background_color: "#1f2933"
 features:
   app_home:

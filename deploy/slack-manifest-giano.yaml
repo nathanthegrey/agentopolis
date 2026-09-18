@@ -3,7 +3,7 @@
 # owner's chat with this agent; it posts in its project's channels and threads as itself.
 display_information:
   name: Giano
-  description: Lead of Ianus: builds and looks after the product
+  description: "Lead of Ianus: builds and looks after the product"
   background_color: "#1f2933"
 features:
   app_home:
