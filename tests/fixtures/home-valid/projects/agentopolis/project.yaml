@@ -1,0 +1,5 @@
+slug: agentopolis
+name: Agentopolis
+repo: /tmp/agentopolis
+branches: { work: dev, production: master }
+lead: agentopolis-lead

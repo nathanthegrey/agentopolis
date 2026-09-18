@@ -1,0 +1,8 @@
+slack:
+  bot_token_env: xoxb-1-2-3
+  app_token_env: SLACK_APP_TOKEN
+  owner_user_id: U0123ABCD
+language: it
+budgets: { company_monthly_usd: 300 }
+approvals: { timeout_hours: 24, snooze_hours: 4 }
+max_concurrent_turns: 2
