@@ -4,15 +4,18 @@ import {
   approvalCard,
   askCard,
   decidedCard,
+  editedCard,
   editModal,
   hireModal,
   homeView,
+  modelModal,
   receipt,
   replyButton,
   replyModal,
   replyPrompt,
   statusLine,
   taskCard,
+  undoneCard,
 } from "../../src/slack/blocks.js";
 import { LIMITS } from "../../src/slack/limits.js";
 
@@ -157,22 +160,50 @@ describe("homeView", () => {
     spentMicro: 42_000_000,
     waiting: [{ text: "Leo chiede", renderId: 3 }],
     projects: [{ slug: "agentopolis", name: "Agentopolis", channel: "C2" }],
+    parked: [{ taskId: 42, text: "Parcheggiata: il pump ignora i canali vuoti" }],
     updatedAt: AT,
   };
-  it("renders header, cost (stimato, no budget bar), waiting, projects, agents and the update time", () => {
+  it("renders header, cost (stimato, no budget bar), waiting, projects, agents, parked and the update time", () => {
     const v = homeView({ ...base, agents: [agent(1), agent(2)] }) as {
       type: string;
       blocks: Block[];
     };
     expect(v.type).toBe("home");
     const s = JSON.stringify(v.blocks);
-    expect(s).toContain("42.00");
-    expect(s).not.toMatch(/budget|300\.00/);
+    expect(s).toContain("costo 42.00 $ stimato");
+    expect(s).not.toMatch(/budget/i);
     expect(s).toContain("Ti aspettano");
     expect(s).toContain("Apri");
     expect(s).toContain("Vai");
+    expect(s).toContain("Parcheggiate");
+    expect(s).toContain("Apri come compito");
+    expect(s).toContain('"parked_open"');
     expect(s).toContain("Aggiornato alle 18:30");
     expect(s).toContain("Agent 2");
+    expect(s).toContain("Assumi");
+    expect(s).not.toContain("Costi");
+  });
+  it("every agent row has the five-entry overflow menu with op:agent values", () => {
+    const v = homeView({ ...base, agents: [agent(1)] }) as {
+      blocks: (Block & {
+        accessory?: { action_id: string; options: { value: string; text: { text: string } }[] };
+      })[];
+    };
+    const row = v.blocks.find((b) => b.accessory?.action_id === "agent_menu");
+    expect(row?.accessory?.options.map((o) => o.value)).toEqual([
+      "pause:a1",
+      "resume:a1",
+      "model:a1",
+      "restart:a1",
+      "retire:a1",
+    ]);
+    expect(row?.accessory?.options.map((o) => o.text.text)).toEqual([
+      "Pausa",
+      "Riattiva",
+      "Modello",
+      "Ricomincia da capo",
+      "Licenzia",
+    ]);
   });
   it("fits 40 agents (one section each) without a cut", () => {
     const v = homeView({ ...base, agents: Array.from({ length: 40 }, (_, i) => agent(i + 1)) }) as {
@@ -186,12 +217,38 @@ describe("homeView", () => {
     const v = homeView({
       ...base,
       agents: Array.from({ length: 120 }, (_, i) => agent(i + 1)),
-    }) as {
-      blocks: Block[];
-    };
+    }) as { blocks: Block[] };
     expect(v.blocks.length).toBeLessThanOrEqual(LIMITS.blocksPerView);
     expect(JSON.stringify(v.blocks)).toMatch(/…e altri \d+/);
     expect(JSON.stringify(v.blocks.at(-1))).toContain("Aggiornato alle");
+  });
+});
+
+describe("edited card and model modal", () => {
+  it("editedCard shows the diff line with Vedi differenze and Annulla; undoneCard drops the buttons", () => {
+    const c = editedCard({ renderId: 12, agent: "Leo", file: "AGENT.md", added: 3, removed: 1 });
+    expect(c.text).toBe("AGENT.md di Leo aggiornato · +3 −1 righe");
+    expect(actions(c).map((e) => [e.action_id, e.value])).toEqual([
+      ["details", "12:0"],
+      ["undo_edit", "Leo"],
+    ]);
+    const u = undoneCard(c, { agent: "Leo", file: "AGENT.md" });
+    expect(blocksOf(u).some((b) => b.type === "actions")).toBe(false);
+    expect(JSON.stringify(u.blocks)).toContain("modifica annullata");
+  });
+  it("modelModal carries the agent and pre-selects the current model", () => {
+    const v = modelModal({
+      agent: "ceo",
+      models: ["opus", "sonnet", "haiku"],
+      current: "sonnet",
+    }) as {
+      callback_id: string;
+      private_metadata: string;
+      blocks: { element: { initial_option?: { value: string } } }[];
+    };
+    expect(v.callback_id).toBe("model");
+    expect(JSON.parse(v.private_metadata)).toEqual({ agent: "ceo" });
+    expect(v.blocks[0]?.element.initial_option?.value).toBe("sonnet");
   });
 });
 

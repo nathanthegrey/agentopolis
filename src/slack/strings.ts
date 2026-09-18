@@ -46,13 +46,20 @@ export const S = {
     projects: "Progetti",
     go: "Vai",
     agents: "Agenti",
+    parked: "Parcheggiate",
+    openAsTask: "Apri come compito",
     hire: "Assumi",
-    costs: "Costi",
     updated: (hhmm: string) => `Aggiornato alle ${hhmm}`,
     more: (n: number) => `…e altri ${n}`,
     agentLine: (display: string, state: string, spent: number) =>
       `${state} *${display}* · ${formatUsd(spent)} $`,
-    overflow: { pause: "Pausa", model: "Modello", fire: "Licenzia" },
+    overflow: {
+      pause: "Pausa",
+      resume: "Riattiva",
+      model: "Modello",
+      restart: "Ricomincia da capo",
+      retire: "Licenzia",
+    },
   },
   hire: {
     title: "Assumi un agente",
@@ -66,21 +73,32 @@ export const S = {
     title: (file: string) => `Modifica ${file}`.slice(0, 24),
     label: "Testo",
     submit: "Salva",
+    updated: (file: string, agent: string, added: number, removed: number) =>
+      `${file} di ${agent} aggiornato · +${added} −${removed} righe`,
+    diff: "Vedi differenze",
+    undo: "Annulla",
+    undone: (file: string, agent: string) => `${file} di ${agent}: modifica annullata`,
+  },
+  model: {
+    title: "Cambia modello",
+    label: "Modello",
+    submit: "Cambia",
   },
   usage:
-    "Comandi: /agentopolis, /hire, /edit <agente>, /pause <agente>, /resume <agente>, /model <agente> <modello>, /costs, /pulse, /diag <agente>, /rollback",
+    "Comandi: /agentopolis, /hire, /edit <agente> [AGENT|MEMORY], /diag <agente>. Pausa, riattiva, modello, ricomincia da capo e licenzia sono nel menu di ogni agente in Home.",
   staleCard: "Questa card è stata superata: guarda quella più recente.",
   unknownAgent: (name: string) => `Non conosco l'agente "${name}".`,
   unknownRole: (name: string) => `Ruolo sconosciuto: ${name}`,
   required: "Campo obbligatorio",
-  notANumber: "Serve un numero positivo",
   failed: "Non ci sono riuscito",
-  paused: (agent: string) => `⏸️ ${agent} è in pausa.`,
-  resumed: (agent: string) => `🟢 ${agent} è di nuovo attivo.`,
-  modelSet: (agent: string, model: string) => `🟢 ${agent} userà ${model} dal prossimo turno.`,
-  rolledBack: "🟢 Modifica annullata.",
-  useHireToFire:
-    "Per licenziare usa il menu dell'agente in Home dopo la fetta 6; per ora metti in pausa.",
+  done: {
+    paused: (agent: string) => `⏸️ ${agent} è in pausa.`,
+    resumed: (agent: string) => `🟢 ${agent} è di nuovo attivo.`,
+    model: (agent: string, model: string) => `🟢 ${agent} userà ${model} dal prossimo turno.`,
+    restarted: (agent: string) => `🟢 ${agent} ricomincia da capo (MEMORY.md conservata).`,
+    retired: (agent: string) => `🟢 ${agent} è stato licenziato.`,
+    parkedOpened: "🟢 Compito aperto dalla parcheggiata.",
+  },
   duration: (seconds: number) =>
     seconds < 60 ? `${seconds} s` : `${Math.round(seconds / 60)} min`,
 } as const;

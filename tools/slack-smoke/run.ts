@@ -15,7 +15,7 @@ import { SystemClock } from "../../src/ports/clock.js";
 import { createSlackApp } from "../../src/slack/app.js";
 import { answeredCard, askCard, homeView } from "../../src/slack/blocks.js";
 import { ensureChannels } from "../../src/slack/bootstrap.js";
-import { type DaemonActions, dispatchCommand, dispatchView } from "../../src/slack/commands.js";
+import { type Daemon, dispatchCommand, dispatchView } from "../../src/slack/commands.js";
 import type { Inbound } from "../../src/slack/inbox.js";
 import { postAsPersona } from "../../src/slack/persona.js";
 import { openDatabase } from "../../src/store/db.js";
@@ -72,25 +72,26 @@ const waitFor = (label: string, match: (i: Inbound) => boolean): Promise<Inbound
 
 const hired: unknown[] = [];
 const ok = async () => ({ ok: true }) as const;
-const actions: DaemonActions = {
+const daemon: Daemon = {
   hire: async (form) => {
     hired.push(form);
     return { ok: true };
   },
   edit: ok,
-  currentText: async (agent, file) => `(${agent}/${file}: testo di prova dello smoke)`,
+  undoEdit: ok,
   pause: ok,
   resume: ok,
   setModel: ok,
-  costs: async () => "costi: smoke, nessun turno",
-  status: async () => "smoke: demone non in esecuzione",
+  restart: ok,
+  retire: ok,
   diag: async () => "smoke: nessun turno",
-  rollback: ok,
-  homeView: async () => view(),
+  openParked: ok,
   answer: ok,
   approve: ok,
   deny: ok,
   reply: ok,
+  currentText: async (agent, file) => `(${agent}/${file}: testo di prova dello smoke)`,
+  homeView: async () => view(),
   details: async () => ({ smoke: true }),
 };
 const view = () =>
@@ -109,6 +110,7 @@ const view = () =>
       state: "🟢",
       spentMicro: 0,
     })),
+    parked: [],
     updatedAt: clock.now(),
   });
 
@@ -124,9 +126,9 @@ const slack = createSlackApp({
     const w = waiters.findIndex((x) => x.match(inbound));
     if (w >= 0) waiters.splice(w, 1)[0]?.resolve(inbound);
     if (inbound.kind === "command")
-      await dispatchCommand(inbound, actions, slack.chat, { snapshot, ownerUserId: owner });
+      await dispatchCommand(inbound, daemon, slack.chat, { snapshot, ownerUserId: owner });
     if (inbound.kind === "view_submitted")
-      return dispatchView(inbound, actions, slack.chat, { snapshot, ownerUserId: owner });
+      return dispatchView(inbound, daemon, slack.chat, { snapshot, ownerUserId: owner });
     return undefined;
   },
 });

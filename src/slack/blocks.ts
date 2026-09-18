@@ -183,8 +183,13 @@ export type HomeInput = {
   waiting: { text: string; renderId: number }[];
   projects: { slug: string; name: string; channel: string }[];
   agents: { name: string; display: string; state: string; spentMicro: number }[];
+  parked: { taskId: number; text: string }[];
   updatedAt: number;
 };
+
+/** the per-agent overflow menu: value "<op>:<agent>" for action_id agent_menu */
+export const AGENT_MENU_OPS = ["pause", "resume", "model", "restart", "retire"] as const;
+export type AgentMenuOp = (typeof AGENT_MENU_OPS)[number];
 
 export function homeView(h: HomeInput): unknown {
   const blocks: unknown[] = [
@@ -208,21 +213,29 @@ export function homeView(h: HomeInput): unknown {
       accessory: button(S.home.go, "home_go", p.channel),
     });
   }
+  const parked: unknown[] = [];
+  if (h.parked.length) {
+    parked.push(divider(), section(`*${S.home.parked}*`));
+    for (const p of h.parked.slice(0, 10)) {
+      parked.push({
+        type: "section",
+        text: mrkdwn(p.text),
+        accessory: button(S.home.openAsTask, "parked_open", String(p.taskId)),
+      });
+    }
+  }
   blocks.push(divider(), section(`*${S.home.agents}*`));
   const overflow = (name: string) => ({
     type: "overflow",
     action_id: "agent_menu",
-    options: [
-      { text: plain(S.home.overflow.pause), value: `pause:${name}` },
-      { text: plain(S.home.overflow.model), value: `model:${name}` },
-      { text: plain(S.home.overflow.fire), value: `fire:${name}` },
-    ],
+    options: AGENT_MENU_OPS.map((op) => ({
+      text: plain(S.home.overflow[op]),
+      value: `${op}:${name}`,
+    })),
   });
   const tail: unknown[] = [
-    actions([
-      button(S.home.hire, "home_hire", "hire"),
-      button(S.home.costs, "home_costs", "costs"),
-    ]),
+    ...parked,
+    actions([button(S.home.hire, "home_hire", "hire")]),
     context(S.home.updated(hhmm(h.updatedAt))),
   ];
   // one section per agent (its overflow menu is an accessory), cut so that the whole view fits
@@ -240,6 +253,34 @@ export function homeView(h: HomeInput): unknown {
   blocks.push(...tail);
   assertBlocks(blocks, LIMITS.blocksPerView);
   return { type: "home", blocks };
+}
+
+// ---- edits ---------------------------------------------------------------------------------
+
+/** posted by the daemon after /edit: "AGENT.md di Leo aggiornato · +3 −1 righe" */
+export function editedCard(e: {
+  renderId: number;
+  agent: string;
+  file: EditableFile;
+  added: number;
+  removed: number;
+}): Card {
+  const text = S.edit.updated(e.file, e.agent, e.added, e.removed);
+  return finish(text, [
+    section(text),
+    actions(
+      [
+        button(S.edit.diff, "details", `${e.renderId}:0`),
+        button(S.edit.undo, "undo_edit", e.agent),
+      ],
+      `edit:${e.renderId}`,
+    ),
+  ]);
+}
+
+export function undoneCard(card: Card, e: { agent: string; file: EditableFile }): Card {
+  const kept = card.blocks.filter((b) => (b as { type: string }).type !== "actions");
+  return finish(card.text, [...kept, context(S.edit.undone(e.file, e.agent))]);
 }
 
 // ---- modals --------------------------------------------------------------------------------
@@ -326,5 +367,19 @@ export function replyModal(d: { renderId: number; question: string }): unknown {
     S.send,
     [...sections(d.question), input("text", S.replyLabel, textInput("text", { multiline: true }))],
     { renderId: d.renderId },
+  );
+}
+
+export function modelModal(d: {
+  agent: string;
+  models: string[];
+  current: string | undefined;
+}): unknown {
+  return modal(
+    "model",
+    S.model.title,
+    S.model.submit,
+    [input("model", S.model.label, select("model", d.models, d.current))],
+    { agent: d.agent },
   );
 }
