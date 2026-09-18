@@ -43,6 +43,10 @@ try {
   process.exit(5);
 }
 
+// A hang that ignores SIGINT must ignore it from the very first line, or a SIGINT arriving
+// between an earlier step and the hang step would end the fake early (a race seen under load).
+if (steps.some((step) => step.hang?.ignore_sigint)) process.on("SIGINT", () => {});
+
 const substitute = (value) => {
   if (typeof value === "string") return value.replaceAll("$SESSION", session);
   if (Array.isArray(value)) return value.map(substitute);
@@ -130,7 +134,6 @@ for (const step of steps) {
       result: text,
     });
   } else if ("hang" in step) {
-    if (step.hang?.ignore_sigint) process.on("SIGINT", () => {});
     setInterval(() => {}, 1000);
     await new Promise(() => {});
   } else if ("exit" in step) {
