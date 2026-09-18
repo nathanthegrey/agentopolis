@@ -57,6 +57,20 @@ describe("AgentFile", () => {
     });
     expect(a.paused).toBe(false);
   });
+  it("accepts slack_app for a standing agent", () => {
+    const a = AgentFile.parse({
+      name: "ada",
+      display: "Ada",
+      role: "lead",
+      reports_to: "jarvis",
+      slack_app: "ada",
+    });
+    expect(a.slack_app).toBe("ada");
+    expect(
+      AgentFile.parse({ name: "nina", display: "Nina", role: "developer", reports_to: "ada" })
+        .slack_app,
+    ).toBeUndefined();
+  });
   it("requires a lowercase slug name", () => {
     expect(
       AgentFile.safeParse({ name: "Leo Lead", display: "x", role: "lead", reports_to: "ceo" })
@@ -89,10 +103,12 @@ describe("ProjectFile", () => {
 describe("ConfigFile", () => {
   const config = {
     slack: {
-      bot_token_env: "SLACK_BOT_TOKEN",
-      app_token_env: "SLACK_APP_TOKEN",
       owner_user_id: "U0123ABCD",
       work_channel_suffix: "-work",
+      apps: {
+        company: { bot_token_env: "SLACK_BOT_TOKEN", app_token_env: "SLACK_APP_TOKEN" },
+        ada: { bot_token_env: "SLACK_BOT_TOKEN_ADA", app_token_env: "SLACK_APP_TOKEN_ADA" },
+      },
     },
     language: "it",
     budgets: { company_monthly_usd: 300 },
@@ -109,6 +125,14 @@ describe("ConfigFile", () => {
   });
   it("rejects a time that is not HH:MM", () => {
     expect(ConfigFile.safeParse({ ...config, daily_digest_at: "8h30" }).success).toBe(false);
+  });
+  it("slack.apps must include company; extra apps are fine", () => {
+    const { apps } = config.slack;
+    expect(
+      ConfigFile.safeParse({ ...config, slack: { ...config.slack, apps: { ada: apps.ada } } })
+        .success,
+    ).toBe(false);
+    expect(ConfigFile.parse(config).slack.apps.ada?.bot_token_env).toBe("SLACK_BOT_TOKEN_ADA");
   });
   it("job_names defaults to an empty list; snooze_hours and quiet_hours are gone", () => {
     const { job_names: _omit, ...withoutNames } = config;

@@ -47,8 +47,8 @@ describe("ensureChannels", () => {
     const rows = db.orm.select().from(containers).all();
     expect(rows.map((r) => [r.kind, r.defaultTo, r.slackChannel, r.members])).toEqual([
       ["standing", "ceo", "C001", ["ceo", "owner"]],
-      ["standing", "agentopolis-lead", "C002", ["agentopolis-lead", "owner"]],
-      ["standing", "agentopolis-lead", "C003", ["agentopolis-lead", "owner"]],
+      ["standing", "ada", "C002", ["ada", "owner"]],
+      ["standing", "ada", "C003", ["ada", "owner"]],
     ]);
     expect(eventKinds(db).filter((k) => k === "channel.created")).toHaveLength(3);
     const second = await ensureChannels(chat, db, clock, home.snapshot, OWNER);

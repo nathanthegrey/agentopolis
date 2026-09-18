@@ -19,7 +19,10 @@ describe("loadHome", () => {
     if (!r.ok) return;
     expect(r.snapshot.roles.get("ceo")?.soul).toContain("Soul");
     expect(r.snapshot.roles.get("ceo")?.tools).toEqual(["agentopolis"]);
-    expect(r.snapshot.agents.get("ceo")?.display).toBe("Ada · CEO");
+    expect(r.snapshot.agents.get("ceo")?.display).toBe("Jarvis · CEO");
+    expect(r.snapshot.agents.get("ceo")?.slack_app).toBe("company");
+    expect(r.snapshot.agents.get("ada")?.slack_app).toBe("ada");
+    expect(r.snapshot.agents.get("nina")?.slack_app).toBeUndefined();
     expect(r.snapshot.projects.get("agentopolis")?.branches.production).toBe("master");
     expect(r.snapshot.style).toContain("Tu form");
     expect(Object.isFrozen(r.snapshot)).toBe(true);
@@ -60,6 +63,18 @@ describe("loadHome", () => {
     if (!a.ok || !b.ok) return;
     expect(a.snapshot.dir).not.toBe(b.snapshot.dir);
     expect(a.snapshot.version).toBe(b.snapshot.version);
+  });
+
+  it("rejects an agent whose slack_app is not in config.slack.apps", () => {
+    const d = copyOfValid();
+    writeFileSync(
+      join(d, "agents", "ada", "agent.yaml"),
+      "name: ada\ndisplay: Ada\nrole: lead\nproject: agentopolis\nreports_to: ceo\nslack_app: penny\n",
+    );
+    const r = loadHome(d);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors.map((e) => e.message).some((m) => m.includes('slack_app "penny"'))).toBe(true);
   });
 
   it("changes version when any file changes", () => {

@@ -50,6 +50,8 @@ export const AgentFile = z.strictObject({
   role: slug,
   project: slug.optional(),
   reports_to: slug,
+  /** standing agents name their Slack app (a key of config.slack.apps); the ceo uses "company" */
+  slack_app: slug.optional(),
   model: z.string().min(1).nullable().default(null),
   effort: Effort.nullable().default(null),
   budget_monthly_usd: positive.nullable().default(null),
@@ -81,10 +83,15 @@ export const McpServerDef = z.strictObject({
 
 export const ConfigFile = z.strictObject({
   slack: z.strictObject({
-    bot_token_env: z.string().min(1),
-    app_token_env: z.string().min(1),
     owner_user_id: z.string().regex(/^[UW][A-Z0-9]+$/),
     work_channel_suffix: z.string().default("-work"),
+    /** one Socket Mode app each; "company" is the ceo and owns commands, Home and cards */
+    apps: z
+      .record(
+        slug,
+        z.strictObject({ bot_token_env: z.string().min(1), app_token_env: z.string().min(1) }),
+      )
+      .refine((apps) => "company" in apps, { message: 'slack.apps must include "company"' }),
   }),
   language: z.enum(["it", "en"]).default("it"),
   budgets: z.strictObject({ company_monthly_usd: positive }),

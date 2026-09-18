@@ -26,7 +26,7 @@ async function scenario() {
   const work = mkdtempSync(join(tmpdir(), "contract-"));
   const home = initHome(join(work, "home"));
   const role = home.snapshot.roles.get("ceo");
-  const instance = home.snapshot.agents.get("ceo");
+  const instance = home.snapshot.agents.get("jarvis");
   if (!role || !instance) throw new Error("examples/home lacks the ceo");
   const systemPromptFile = join(work, "system.md");
   writeFileSync(systemPromptFile, composeSystemPrompt(home.snapshot.style, role));

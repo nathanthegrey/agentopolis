@@ -72,7 +72,7 @@ describe("outbox pump", () => {
     expect(p?.channel).toBe("C1");
     expect(p?.threadTs).toBe("1700.5");
     expect(p?.text).toBe("ciao capo");
-    expect(p?.persona?.username).toBe("Ada · CEO");
+    expect(p?.persona?.username).toBe("Jarvis · CEO");
     expect(t.rows()[0]?.doneAt).toBe(t.clock.now());
     expect(t.rows()[0]?.slackTs).toBe("1700000000.000001");
     expect(t.eventKinds()).toEqual(["message.posted", "mirror.sent"]);

@@ -1,8 +1,9 @@
 slack:
-  bot_token_env: SLACK_BOT_TOKEN        # secrets live in the environment, never in files
-  app_token_env: SLACK_APP_TOKEN
   owner_user_id: U0000000000            # replace with your Slack user id
   work_channel_suffix: -work
+  apps:                                 # one Socket Mode app each; secrets stay in the environment
+    company: { bot_token_env: SLACK_BOT_TOKEN, app_token_env: SLACK_APP_TOKEN }
+    ada: { bot_token_env: SLACK_BOT_TOKEN_ADA, app_token_env: SLACK_APP_TOKEN_ADA }
 language: it
 budgets:
   company_monthly_usd: 300
