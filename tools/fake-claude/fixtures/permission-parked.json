@@ -1,0 +1,56 @@
+[
+  {
+    "emit": {
+      "type": "rate_limit_event",
+      "rate_limit_info": {
+        "status": "allowed",
+        "unifiedWindows": { "five_hour": { "utilization": 0.1 } }
+      }
+    }
+  },
+  {
+    "emit": {
+      "type": "system",
+      "subtype": "init",
+      "session_id": "$SESSION",
+      "model": "fake",
+      "tools": [],
+      "mcp_servers": [{ "name": "agentopolis", "status": "connected" }],
+      "apiKeySource": "none"
+    }
+  },
+  {
+    "emit": { "type": "assistant", "message": { "content": [{ "type": "text", "text": "ciao" }] } }
+  },
+  {
+    "await_control": {
+      "request_id": "r1",
+      "request": {
+        "subtype": "can_use_tool",
+        "tool_name": "Bash",
+        "input": { "command": "rm -rf /tmp/x" },
+        "permission_suggestions": [],
+        "tool_use_id": "toolu_1"
+      }
+    },
+    "expect": "deny"
+  },
+  {
+    "emit": {
+      "type": "result",
+      "subtype": "success",
+      "is_error": false,
+      "result": "fatto",
+      "session_id": "$SESSION",
+      "total_cost_usd": 0.002,
+      "usage": {
+        "input_tokens": 3,
+        "cache_read_input_tokens": 100,
+        "cache_creation_input_tokens": 10
+      },
+      "modelUsage": { "m": { "costUSD": 0.002, "costBasis": "list" } },
+      "permission_denials": []
+    }
+  },
+  { "exit": 0 }
+]

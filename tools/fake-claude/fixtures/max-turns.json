@@ -1,0 +1,29 @@
+[
+  {
+    "emit": {
+      "type": "system",
+      "subtype": "init",
+      "session_id": "$SESSION",
+      "model": "fake",
+      "tools": [],
+      "mcp_servers": [{ "name": "agentopolis", "status": "connected" }],
+      "apiKeySource": "none"
+    }
+  },
+  {
+    "emit": { "type": "assistant", "message": { "content": [{ "type": "text", "text": "ciao" }] } }
+  },
+  {
+    "emit": {
+      "type": "result",
+      "subtype": "error_max_turns",
+      "is_error": true,
+      "session_id": "$SESSION",
+      "total_cost_usd": 0.01,
+      "usage": {},
+      "modelUsage": { "m": { "costBasis": "list" } },
+      "permission_denials": []
+    }
+  },
+  { "exit": 1 }
+]

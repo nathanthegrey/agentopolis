@@ -7,6 +7,12 @@ if (!home.ok) throw new Error("home-valid fixture does not load");
 export const snapshot = home.snapshot;
 
 export const SESSION = "11111111-1111-4111-8111-111111111111";
+export const FAKE = fileURLToPath(
+  new URL("../../tools/fake-claude/fake-claude.mjs", import.meta.url),
+);
+export const FIXTURES = fileURLToPath(
+  new URL("../../tools/fake-claude/fixtures/", import.meta.url),
+);
 
 export function makeSpec(overrides: Partial<TurnSpec> = {}): TurnSpec {
   const role = snapshot.roles.get("ceo");
