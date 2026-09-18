@@ -96,9 +96,9 @@ describe("ConfigFile", () => {
     },
     language: "it",
     budgets: { company_monthly_usd: 300 },
-    approvals: { timeout_hours: 24, snooze_hours: 4 },
-    quiet_hours: { from: "23:00", to: "08:00", tz: "Europe/Rome" },
+    approvals: { timeout_hours: 24 },
     daily_digest_at: "08:30",
+    job_names: ["Nina", "Marco"],
     max_concurrent_turns: 3,
     mcp_servers: {
       github: { command: "npx", args: ["-y", "@modelcontextprotocol/server-github"] },
@@ -109,6 +109,21 @@ describe("ConfigFile", () => {
   });
   it("rejects a time that is not HH:MM", () => {
     expect(ConfigFile.safeParse({ ...config, daily_digest_at: "8h30" }).success).toBe(false);
+  });
+  it("job_names defaults to an empty list; snooze_hours and quiet_hours are gone", () => {
+    const { job_names: _omit, ...withoutNames } = config;
+    expect(ConfigFile.parse(withoutNames).job_names).toEqual([]);
+    expect(ConfigFile.parse(config).job_names).toEqual(["Nina", "Marco"]);
+    expect(
+      ConfigFile.safeParse({ ...config, approvals: { timeout_hours: 24, snooze_hours: 4 } })
+        .success,
+    ).toBe(false);
+    expect(
+      ConfigFile.safeParse({
+        ...config,
+        quiet_hours: { from: "23:00", to: "08:00", tz: "Europe/Rome" },
+      }).success,
+    ).toBe(false);
   });
 });
 

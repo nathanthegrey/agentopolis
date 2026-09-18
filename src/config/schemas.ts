@@ -88,9 +88,10 @@ export const ConfigFile = z.strictObject({
   }),
   language: z.enum(["it", "en"]).default("it"),
   budgets: z.strictObject({ company_monthly_usd: positive }),
-  approvals: z.strictObject({ timeout_hours: positive, snooze_hours: positive }),
-  quiet_hours: z.strictObject({ from: hhmm, to: hhmm, tz: z.string().min(1) }).optional(),
+  approvals: z.strictObject({ timeout_hours: positive }),
   daily_digest_at: hhmm.optional(),
+  /** display names for job agents, round robin (spec section 4) */
+  job_names: z.array(z.string().min(1)).default([]),
   max_concurrent_turns: z.number().int().positive().default(3),
   mcp_servers: z.record(z.string(), McpServerDef).default({}),
 });

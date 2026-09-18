@@ -4,5 +4,5 @@ slack:
   owner_user_id: U0123ABCD
 language: it
 budgets: { company_monthly_usd: 300 }
-approvals: { timeout_hours: 24, snooze_hours: 4 }
+approvals: { timeout_hours: 24 }
 max_concurrent_turns: 2
