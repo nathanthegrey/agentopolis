@@ -777,10 +777,15 @@ direct NDJSON peer of the CLI. One package; folders `src/<module>/` mirror secti
 Settled by throwaway scripts against the real workspace and the installed CLI, with the answer
 recorded here.
 
-1. Does `chat.update` keep the `username`/`icon_url` of a persona message? Assumed **no** (five
-   codebases never try); the check only decides whether a nicety is possible. [pending, slice 3]
-2. Are `agents.sessions.setStatus` / `rename` enabled for this workspace (`feature_disabled`
-   otherwise), in a private channel thread, without `agent_view`? [pending, slice 3]
+1. `chat.update` **keeps** the persona of a message: the response carried
+   `message.username: "Nina · developer"` and `icons: {"emoji": ":female-technologist:"}`, and
+   in Slack the edited message still showed Nina's name and icon, grouped under "Nina ·
+   developer" [live 2026-09-19, Ada's app, `#agentopolis-work`]. The assumption ("no", five
+   codebases never try) was wrong: a persona message *can* be updated. "A persona message is
+   immutable" stays as a design choice (one rule instead of two, section 9), not a constraint.
+2. `agents.sessions.setStatus` and `agents.sessions.rename` both return **`not_authorized`** for
+   Ada's app in a private channel thread (agent features unavailable for this app or plan)
+   [live 2026-09-19]. v1 never requires them; the edited status line is the only path.
 3. `--output-format stream-json` **carries** `structured_output` when `--json-schema` is passed:
    the result line held `{"word":"ok"}` [live 2026-09-18, claude 2.1.276].
 4. A `can_use_tool` request **held 200 s was still answered**: allow accepted, no denials, the
