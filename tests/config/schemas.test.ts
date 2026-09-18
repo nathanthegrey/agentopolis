@@ -57,6 +57,20 @@ describe("AgentFile", () => {
     });
     expect(a.paused).toBe(false);
   });
+  it("accepts slack_app for a standing agent", () => {
+    const a = AgentFile.parse({
+      name: "ada",
+      display: "Ada",
+      role: "lead",
+      reports_to: "jarvis",
+      slack_app: "ada",
+    });
+    expect(a.slack_app).toBe("ada");
+    expect(
+      AgentFile.parse({ name: "nina", display: "Nina", role: "developer", reports_to: "ada" })
+        .slack_app,
+    ).toBeUndefined();
+  });
   it("requires a lowercase slug name", () => {
     expect(
       AgentFile.safeParse({ name: "Leo Lead", display: "x", role: "lead", reports_to: "ceo" })
@@ -89,16 +103,18 @@ describe("ProjectFile", () => {
 describe("ConfigFile", () => {
   const config = {
     slack: {
-      bot_token_env: "SLACK_BOT_TOKEN",
-      app_token_env: "SLACK_APP_TOKEN",
       owner_user_id: "U0123ABCD",
       work_channel_suffix: "-work",
+      apps: {
+        company: { bot_token_env: "SLACK_BOT_TOKEN", app_token_env: "SLACK_APP_TOKEN" },
+        ada: { bot_token_env: "SLACK_BOT_TOKEN_ADA", app_token_env: "SLACK_APP_TOKEN_ADA" },
+      },
     },
     language: "it",
     budgets: { company_monthly_usd: 300 },
-    approvals: { timeout_hours: 24, snooze_hours: 4 },
-    quiet_hours: { from: "23:00", to: "08:00", tz: "Europe/Rome" },
+    approvals: { timeout_hours: 24 },
     daily_digest_at: "08:30",
+    job_names: ["Nina", "Marco"],
     max_concurrent_turns: 3,
     mcp_servers: {
       github: { command: "npx", args: ["-y", "@modelcontextprotocol/server-github"] },
@@ -109,6 +125,29 @@ describe("ConfigFile", () => {
   });
   it("rejects a time that is not HH:MM", () => {
     expect(ConfigFile.safeParse({ ...config, daily_digest_at: "8h30" }).success).toBe(false);
+  });
+  it("slack.apps must include company; extra apps are fine", () => {
+    const { apps } = config.slack;
+    expect(
+      ConfigFile.safeParse({ ...config, slack: { ...config.slack, apps: { ada: apps.ada } } })
+        .success,
+    ).toBe(false);
+    expect(ConfigFile.parse(config).slack.apps.ada?.bot_token_env).toBe("SLACK_BOT_TOKEN_ADA");
+  });
+  it("job_names defaults to an empty list; snooze_hours and quiet_hours are gone", () => {
+    const { job_names: _omit, ...withoutNames } = config;
+    expect(ConfigFile.parse(withoutNames).job_names).toEqual([]);
+    expect(ConfigFile.parse(config).job_names).toEqual(["Nina", "Marco"]);
+    expect(
+      ConfigFile.safeParse({ ...config, approvals: { timeout_hours: 24, snooze_hours: 4 } })
+        .success,
+    ).toBe(false);
+    expect(
+      ConfigFile.safeParse({
+        ...config,
+        quiet_hours: { from: "23:00", to: "08:00", tz: "Europe/Rome" },
+      }).success,
+    ).toBe(false);
   });
 });
 

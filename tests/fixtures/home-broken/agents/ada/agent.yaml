@@ -1,0 +1,7 @@
+name: ada
+display: Ada · lead Agentopolis
+avatar: https://example.test/ada.png
+role: lead
+project: agentopolis
+reports_to: ceo
+slack_app: ada

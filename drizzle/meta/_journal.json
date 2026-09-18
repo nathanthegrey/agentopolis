@@ -15,6 +15,13 @@
       "when": 1789747780384,
       "tag": "0001_dashing_lizard",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789773812354,
+      "tag": "0002_giant_madame_web",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,10 @@
 import { and, eq, gte } from "drizzle-orm";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { Clock } from "../ports/clock.js";
 import type { Db } from "./db.js";
 import * as schema from "./schema.js";
+
+type Tx = BetterSQLite3Database<typeof schema>;
 
 const DAY = 86_400_000;
 
@@ -40,4 +43,8 @@ export function recordInbound(
       .get().id;
     return { inserted: true, id };
   });
+}
+
+export function markProcessed(tx: Tx, id: number, at: number): void {
+  tx.update(schema.inbox).set({ processedAt: at }).where(eq(schema.inbox.id, id)).run();
 }

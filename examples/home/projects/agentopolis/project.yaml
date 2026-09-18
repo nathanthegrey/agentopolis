@@ -4,4 +4,4 @@ repo: /replace/me/agentopolis
 branches:
   work: dev
   production: master      # merges and pushes here always need the owner's button
-lead: agentopolis-lead
+lead: ada

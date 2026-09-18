@@ -12,7 +12,10 @@ export const agents = sqliteTable("agents", {
 
 export const containers = sqliteTable("containers", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  kind: text("kind", { enum: ["standing", "task"] }).notNull(),
+  /** dm: an app's direct message with the owner; standing: a project channel; task: a thread */
+  kind: text("kind", { enum: ["dm", "standing", "task"] }).notNull(),
+  /** the Slack channel name as created or adopted ("agentopolis-hq"), or "dm:<agent>" */
+  name: text("name"),
   members: text("members", { mode: "json" }).$type<string[]>().notNull(),
   defaultTo: text("default_to").notNull(),
   taskId: integer("task_id"),

@@ -123,6 +123,9 @@ export function loadHome(dir: string): LoadResult {
     if (agent.project !== undefined && !projects.has(agent.project)) {
       errors.push({ file, message: `project "${agent.project}" does not exist` });
     }
+    if (agent.slack_app !== undefined && config && !(agent.slack_app in config.slack.apps)) {
+      errors.push({ file, message: `slack_app "${agent.slack_app}" is not in config.slack.apps` });
+    }
   }
 
   if (errors.length > 0 || !config) return { ok: false, errors };

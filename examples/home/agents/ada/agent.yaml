@@ -1,0 +1,6 @@
+name: ada
+display: Ada · lead Agentopolis
+role: lead
+project: agentopolis
+reports_to: jarvis
+slack_app: ada

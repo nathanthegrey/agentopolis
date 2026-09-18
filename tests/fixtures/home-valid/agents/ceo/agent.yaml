@@ -1,4 +1,5 @@
 name: ceo
-display: Ada · CEO
+display: Jarvis · CEO
 role: ceo
 reports_to: owner
+slack_app: company

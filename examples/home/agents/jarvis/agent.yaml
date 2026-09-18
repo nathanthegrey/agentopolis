@@ -1,0 +1,5 @@
+name: jarvis
+display: Jarvis · CEO
+role: ceo
+reports_to: owner
+slack_app: company

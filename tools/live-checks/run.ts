@@ -45,7 +45,7 @@ function must<T>(v: T | undefined, what: string): T {
   return v;
 }
 const ceo = must(home.snapshot.roles.get("ceo"), "the ceo role");
-const instance = must(home.snapshot.agents.get("ceo"), "the ceo agent");
+const instance = must(home.snapshot.agents.get("jarvis"), "the ceo agent (jarvis)");
 // the checks need Bash: a copy of the ceo role with nothing stripped and no allow rules
 const bashRole: Role = {
   ...ceo,

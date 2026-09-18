@@ -1,8 +1,9 @@
 slack:
-  bot_token_env: SLACK_BOT_TOKEN
-  app_token_env: SLACK_APP_TOKEN
   owner_user_id: U0123ABCD
+  apps:
+    company: { bot_token_env: SLACK_BOT_TOKEN, app_token_env: SLACK_APP_TOKEN }
+    ada: { bot_token_env: SLACK_BOT_TOKEN_ADA, app_token_env: SLACK_APP_TOKEN_ADA }
 language: it
 budgets: { company_monthly_usd: 300 }
-approvals: { timeout_hours: 24, snooze_hours: 4 }
+approvals: { timeout_hours: 24 }
 max_concurrent_turns: 2
