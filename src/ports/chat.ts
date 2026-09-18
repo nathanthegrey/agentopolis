@@ -22,6 +22,8 @@ export interface Chat {
     blocks?: Blocks;
   }): Promise<void>;
   createPrivateChannel(name: string): Promise<{ id: string }>;
+  /** every private channel the bot can see (conversations.list), for bootstrap adoption */
+  listPrivateChannels(): Promise<{ id: string; name: string }[]>;
   invite(channel: string, users: string[]): Promise<void>;
   archive(channel: string): Promise<void>;
   setTopic(channel: string, topic: string): Promise<void>;

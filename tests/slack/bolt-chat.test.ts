@@ -32,6 +32,20 @@ function stub() {
       postEphemeral: m("chat.postEphemeral"),
     },
     conversations: {
+      list: async (args: Record<string, unknown>) => {
+        calls.push({ method: "conversations.list", args });
+        return args.cursor
+          ? {
+              ok: true,
+              channels: [{ id: "C2", name: "beta" }],
+              response_metadata: { next_cursor: "" },
+            }
+          : {
+              ok: true,
+              channels: [{ id: "C1", name: "alpha" }],
+              response_metadata: { next_cursor: "page2" },
+            };
+      },
       create: m("conversations.create"),
       invite: m("conversations.invite"),
       archive: m("conversations.archive"),
@@ -167,5 +181,17 @@ describe("BoltChat", () => {
       filename: "r.md",
       title: "Report",
     });
+  });
+
+  it("lists private channels across pages", async () => {
+    const s = stub();
+    const list = await new BoltChat(s.client).listPrivateChannels();
+    expect(list).toEqual([
+      { id: "C1", name: "alpha" },
+      { id: "C2", name: "beta" },
+    ]);
+    const args = s.calls.filter((c) => c.method === "conversations.list").map((c) => c.args);
+    expect(args[0]).toMatchObject({ types: "private_channel", exclude_archived: true, limit: 200 });
+    expect(args[1]).toMatchObject({ cursor: "page2" });
   });
 });

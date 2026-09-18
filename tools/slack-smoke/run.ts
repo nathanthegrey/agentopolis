@@ -4,8 +4,8 @@
 //   AGENTOPOLIS_LIVE=1 AGENTOPOLIS_CHECKS=1,2 pnpm slack:smoke   (adds spec section 18 checks 1–2)
 // Reads SLACK_BOT_TOKEN, SLACK_APP_TOKEN, AGENTOPOLIS_OWNER from the environment; prints none
 // of them. Exit 0 only if the persona post succeeded and the ask card was answered.
-// If the standing channels already exist (name_taken), set AGENTOPOLIS_SMOKE_CHANNEL to the
-// id of #ceo and the smoke posts there.
+// Standing channels that already exist in the workspace are adopted (conversations.list), so
+// the smoke can run again and again on the same workspace.
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -139,19 +139,13 @@ try {
   step("connect", "socket mode connected");
 
   // channels
-  let ceoChannel = process.env.AGENTOPOLIS_SMOKE_CHANNEL ?? "";
-  try {
-    const r = await ensureChannels(slack.chat, db, clock, snapshot, owner);
-    step("channels", `created ${JSON.stringify(r.created)}`);
-    ceoChannel = r.created.find((c) => c.name === "ceo")?.channel ?? ceoChannel;
-  } catch (e) {
-    const code = e instanceof ChatError ? e.code : String(e);
-    step(
-      "channels",
-      `not created (${code})${ceoChannel ? ", using AGENTOPOLIS_SMOKE_CHANNEL" : ": set AGENTOPOLIS_SMOKE_CHANNEL to the id of #ceo"}`,
-    );
-  }
-  if (!ceoChannel) throw new Error("no channel to post in");
+  const boot = await ensureChannels(slack.chat, db, clock, snapshot, owner);
+  step(
+    "channels",
+    `created ${JSON.stringify(boot.created)} adopted ${JSON.stringify(boot.adopted)}`,
+  );
+  const ceoChannel = boot.channels.get("ceo") ?? "";
+  if (!ceoChannel) throw new Error("no #ceo channel to post in");
 
   // persona
   const ada = snapshot.agents.get("ceo");

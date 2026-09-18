@@ -26,6 +26,7 @@ export type SlackClient = {
     postEphemeral(args: Record<string, unknown>): Result;
   };
   conversations: {
+    list(args: Record<string, unknown>): Result;
     create(args: Record<string, unknown>): Result;
     invite(args: Record<string, unknown>): Result;
     archive(args: Record<string, unknown>): Result;
@@ -150,6 +151,27 @@ export class BoltChat implements Chat {
   async createPrivateChannel(name: string): Promise<{ id: string }> {
     const r = await call(() => this.#c.conversations.create({ name, is_private: true }));
     return { id: String((r.channel as { id?: string } | undefined)?.id ?? "") };
+  }
+
+  async listPrivateChannels(): Promise<{ id: string; name: string }[]> {
+    const out: { id: string; name: string }[] = [];
+    let cursor: string | undefined;
+    do {
+      const r = await call(() =>
+        this.#c.conversations.list({
+          types: "private_channel",
+          exclude_archived: true,
+          limit: 200,
+          ...(cursor ? { cursor } : {}),
+        }),
+      );
+      for (const c of (r.channels as { id?: string; name?: string }[] | undefined) ?? []) {
+        if (c.id && c.name) out.push({ id: c.id, name: c.name });
+      }
+      const next = (r.response_metadata as { next_cursor?: string } | undefined)?.next_cursor;
+      cursor = next ? next : undefined;
+    } while (cursor);
+    return out;
   }
 
   async invite(channel: string, users: string[]): Promise<void> {

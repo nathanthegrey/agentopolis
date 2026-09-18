@@ -32,10 +32,16 @@ export class FakeChat implements Chat {
     string,
     { channel: string; persona: Persona | undefined; args: PostArgs }
   >();
-  readonly channels = new Map<string, string>(); // name → id
+  readonly channels = new Map<string, string>(); // name → id, created through this fake
+  /** channels that "already exist" in the workspace before the test starts */
+  readonly preexisting: { id: string; name: string }[];
   #ts = 0;
   #channelSeq = 0;
   readonly #failures = new Map<keyof Chat, ChatError>();
+
+  constructor(opts: { preexisting?: { id: string; name: string }[] } = {}) {
+    this.preexisting = [...(opts.preexisting ?? [])];
+  }
 
   failNext(method: keyof Chat, error: ChatError): void {
     this.#failures.set(method, error);
@@ -97,10 +103,18 @@ export class FakeChat implements Chat {
 
   async createPrivateChannel(name: string): Promise<{ id: string }> {
     this.#record("createPrivateChannel", name);
+    if (this.channels.has(name) || this.preexisting.some((c) => c.name === name)) {
+      throw new ChatError("name_taken", "name_taken");
+    }
     this.#channelSeq += 1;
     const id = `C${String(this.#channelSeq).padStart(3, "0")}`;
     this.channels.set(name, id);
     return { id };
+  }
+
+  async listPrivateChannels(): Promise<{ id: string; name: string }[]> {
+    this.#record("listPrivateChannels", undefined);
+    return [...this.preexisting, ...[...this.channels].map(([name, id]) => ({ id, name }))];
   }
 
   async invite(channel: string, users: string[]): Promise<void> {
