@@ -1,0 +1,12 @@
+name: ceo
+description: The owner's only interlocutor.
+kind: standing
+model: sonnet
+effort: low
+disallowed_tools: [Edit, Write, NotebookEdit, Bash]
+permissions: { mode: default }
+budget: { monthly_usd: 20, per_turn_usd: 1 }
+max_turns: 20
+max_wall_clock_minutes: 10
+talks_to: [owner, lead]
+requests: [hire, retire, pause, set_budget, open_task]
