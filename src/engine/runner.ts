@@ -21,6 +21,8 @@ export type CliRunnerOptions = {
   clock: Clock;
   /** SIGINT → this long → SIGKILL, for the watchdog and MCP failures (spec 7: 10 s) */
   stopGraceMs?: number;
+  /** appended after the built argv; used only by the live checks (e.g. --json-schema) */
+  extraArgs?: string[];
 };
 
 const STDERR_TAIL = 2_000;
@@ -40,7 +42,10 @@ export class CliRunner implements AgentRunner {
     const mcpConfigFile = join(runsDir, `${spec.turnId}.mcp.json`);
     const runFile = join(runsDir, `${spec.turnId}.ndjson`);
     writeFileSync(mcpConfigFile, JSON.stringify(spec.mcpConfig));
-    const argv = buildArgv(spec, { mcpConfigFile, settingsJson: JSON.stringify(spec.settings) });
+    const argv = [
+      ...buildArgv(spec, { mcpConfigFile, settingsJson: JSON.stringify(spec.settings) }),
+      ...(this.#opts.extraArgs ?? []),
+    ];
 
     const outcome: TurnOutcome = {
       status: "failed",

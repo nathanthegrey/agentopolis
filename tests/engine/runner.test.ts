@@ -183,6 +183,29 @@ describe("CliRunner", () => {
     expect(argv[argv.indexOf("--session-id") + 1]).toBe(SESSION);
   });
 
+  it("extraArgs are appended after the built argv", async () => {
+    const runsDir = mkdtempSync(join(tmpdir(), "runs-"));
+    const argvOut = join(runsDir, "argv.json");
+    const runner = new CliRunner({
+      claudePath: "node",
+      claudeArgs: [FAKE],
+      runsDir,
+      clock: new FakeClock(0),
+      extraArgs: ["--json-schema", "{}"],
+    });
+    const spec = makeSpec({
+      cwd: runsDir,
+      env: {
+        FAKE_CLAUDE_DIR: FIXTURES,
+        FAKE_CLAUDE_FIXTURE: "happy",
+        FAKE_CLAUDE_ARGV_OUT: argvOut,
+      },
+    });
+    await runner.run(spec, { onPermission: async () => ({ behavior: "allow" }) });
+    const argv = JSON.parse(readFileSync(argvOut, "utf8")) as string[];
+    expect(argv.slice(-2)).toEqual(["--json-schema", "{}"]);
+  });
+
   it("tool-call: the turn's MCP server reaches the daemon socket with the per-turn token", async () => {
     const t = setup("tool-call");
     const socketPath = join(t.runsDir, "daemon.sock");
