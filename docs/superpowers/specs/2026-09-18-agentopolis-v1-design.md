@@ -23,10 +23,11 @@ all happen; the agents' engine is the Claude Code CLI on the owner's subscriptio
 ### v1 scope
 
 - The daemon, the home folder, the SQLite store, the Slack app (one bot user).
-- Four roles: `ceo`, `lead`, `developer`, `reviewer`. Research and design are **subagents**
-  a lead or developer spawns inside its own turn (section 12), not agents.
+- Five roles: `ceo`, `lead`, `developer`, `reviewer`, `designer`. Research is a **subagent** a
+  lead or developer spawns inside its own turn (section 12), not an agent.
 - Standing agents (always on, resume their own conversation): `ceo`, one `lead` per project.
-- Job agents (born for one task, resume within it, retire when done): `developer`, `reviewer`.
+- Job agents (born for one task, resume within it, retire when done): `developer`, `reviewer`,
+  `designer`.
 - Addressed messages, mirrored to Slack: a channel per standing agent, a thread per task, the
   owner a member of all of them.
 - Approvals with buttons; pause; per-turn runaway guards; costs shown, never gated.
@@ -34,8 +35,9 @@ all happen; the agents' engine is the Claude Code CLI on the owner's subscriptio
 
 ### Out of v1
 
-Email and a support role, ops, QA, writer, scout and designer as agents of their own, monthly
-budgets, quiet hours or any daemon-side notification schedule, any web page, several machines,
+Email and a support role, ops, QA, writer, scout as an agent of its own, monthly budgets, paid
+overflow to the API when the subscription window is exhausted (owner, 2026-09-19: "free or
+nothing"), quiet hours or any daemon-side notification schedule, any web page, several machines,
 any chat surface other than Slack, one Slack bot per agent (see 9, Identity, for why this is a
 recorded road and not a closed door).
 
@@ -177,8 +179,11 @@ hand-edits them and the tables already are the audit trail.
 name: lead
 description: Runs one product's engineering. Owner-facing for that product.   # routing text
 kind: standing            # standing | job
-model: opus               # alias or full id
-effort: high              # optional; omitted = CLI default
+model: opus               # default; alias or full id
+effort: high              # default; low | medium | high (xhigh is never used, owner 2026-09-19)
+menu:                     # job roles only: what the lead may pick at open_task; the daemon refuses the rest
+  models: [sonnet, opus]
+  efforts: [medium, high]
 tools:                    # MCP servers this role may use, by name from config.yaml
   - agentopolis           # always implied, always loaded into the prefix
   - github
@@ -196,8 +201,10 @@ requests: [open_task, close_task, merge_production]
 
 `roles/<role>/subagents/<name>.md` is a Claude Code subagent definition (frontmatter `name`,
 `description`, `tools`, `model`, body = its prompt) [documented]; the daemon passes the role's
-list with `--agents` as JSON. v1 ships `research` (read-only, web fetch and search, Haiku) and
-`design` (writes only under `design/`, Opus) for `lead` and `developer`.
+list with `--agents` as JSON. v1 ships one: `research` (read-only, web fetch and search,
+Sonnet/medium: it fails by reporting stale pages as truth, which is judgement) for `lead`,
+`developer` and `designer`. Opus or Fable on `research`, and any effort change on it, are gated
+(section 10).
 
 ### agent.yaml (a standing instance)
 
@@ -240,6 +247,11 @@ slack:
 language: it                            # fallback only: agents answer in the owner's language
 approvals:
   timeout_hours: 24                     # merge_production never expires
+permission_hold_minutes: 5              # hold a can_use_tool open this long, then park (10)
+gated:                                  # values that need the owner's card (10)
+  models: [fable]
+  research: { models: [opus, fable], effort: true }
+loop_guard: { messages: 12, review_rejections: 3 }   # per task, see 6
 max_concurrent_turns: 3
 job_names: [Nina, Marco, Sara, Luca, Elena, Paolo]   # display names for job agents, round robin
 mcp_servers:                            # catalogue of tools roles may name
@@ -287,7 +299,9 @@ exists", never a flag that a crash could leave set.
 - A message has a `kind`: `say` (information), `ask` (needs an answer), `report` (a
   deliverable), `system` (written by the daemon: hired, paused, approval results).
 - **The turn's result is the message.** The CLI returns an envelope
-  `{ messages: [{ container, to, kind, body }], remember?: string[], parked?: [{title, why}] }`
+  `{ messages: [{ container, to, kind, body, tests_green? }], remember?: string[], parked?: [{title, why}] }`
+  (`tests_green` is required on a `report` from a developer or designer: it is the one test result
+  the daemon can see, and it feeds the rung counter of section 10)
   validated by `--json-schema`; the daemon appends each message, applies `remember` to
   `MEMORY.md` (standing agents), and turns `parked` into `tasks` rows with status `parked`. A
   result that fails the schema after the CLI's own retries is a failed turn (13). The `post`
@@ -308,6 +322,11 @@ exists", never a flag that a crash could leave set.
   preferences apply, and the daemon never schedules or batches anything around them.
 - **Wake rules.** A post wakes the addressee unless it is paused or already running (then the
   loop's dirty flag records it). The pending set is a query, so a restart replays wakes for free.
+- **Task loop guard.** Nothing else bounds an agent ⇄ agent exchange, so the daemon counts per
+  task: `loop_guard.messages` agent-authored messages with no owner message and no status change,
+  or `loop_guard.review_rejections` rejected reviews, and the task card becomes "bloccato" with
+  **Sblocca** / **Chiudi**; the task's agents get a `system` note and no further wake until the
+  owner presses a button. Counters reset on any owner message in the thread.
 - **What a turn reads.** The daemon builds the turn prompt: a header with the agent's own state
   (open asks, pending requests and permissions, last turn's cost, cache hit ratio), the messages
   addressed to the agent since its last turn, per container, the outcome of any request or
@@ -393,7 +412,7 @@ envelope cannot do:
 |---|---|---|
 | `post(container, to, body, kind)` | all | a message that must leave **before** the turn ends; otherwise the envelope is the message |
 | `read_channel(container, since)` | ceo, lead | back-scroll only: messages after an id; new messages already arrive in the turn prompt |
-| `request(kind, payload)` | per role | `open_task`, `close_task`, `merge_production`; the daemon answers with a request id, the outcome arrives in a later turn prompt |
+| `request(kind, payload)` | per role | `open_task` (payload: title, kind develop/review/design, `preset` piccolo/normale/difficile or explicit `model`+`effort` from the role's menu, `reason`), `close_task`, `merge_production`; the daemon answers with a request id, the outcome arrives in a later turn prompt; a value outside the menu is refused, a gated value answers "in attesa del proprietario" and renders a card |
 
 Which `request` kinds a role may use is in `role.yaml`; the daemon refuses the rest and says why.
 Permission prompts are **not** a tool: they arrive on the CLI's control channel (10). Memory
@@ -505,8 +524,9 @@ Each is a daemon action, not an agent turn.
 ### Status lines and receipts
 
 Inside task threads only, and only once a turn has run for **60 seconds**: one app-identity line
-("Leo sta lavorando · 2 min"), edited in place at most once per second through the same
-per-channel bucket at lowest priority, never re-posted; at turn end it becomes the receipt
+("Leo sta lavorando · 2 min"), edited in place at most once every 30 seconds through the same
+per-channel bucket at lowest priority (three tasks at one edit per second would be 180
+`chat.update` a minute against Slack's 50), never re-posted; at turn end it becomes the receipt
 (duration, cost "stimato", `config_version`). Where `chat.startStream`/`appendStream`/
 `stopStream` is available it is preferred (identity is set at stream open, segments rotated
 before 240 s [field]); the edited line is the fallback. Owner-facing channels get receipts only.
@@ -565,13 +585,25 @@ Three tiers, each where the agent can only ask:
    `control_request` of subtype `can_use_tool` (tool name, input, `tool_use_id`) to stdout and
    waits for a `control_response` with `behavior: allow|deny` [measured end to end on 2.1.276; a
    request held 200 s was still answered, live check 4]. Rules in `role.yaml` answer most calls
-   without the owner. What no rule covers is **parked**: the daemon answers `deny` with "in attesa
-   del proprietario" immediately, stores the request in `permission_requests`, renders the
-   approval card, and re-wakes the agent with the decision when the button lands. A turn is never
-   held open for hours waiting for a human. "Approva per questo compito" stores an allow rule
-   scoped to the task id.
-3. **Daemon actions** for the gated request kinds: merge or push to a production branch. Always
-   a card; `merge_production` never expires.
+   without the owner. What no rule covers is **held, then parked** (owner, 2026-09-19): the
+   daemon renders the approval card at once and keeps the `can_use_tool` request open for
+   `permission_hold_minutes` (default 5; a 200 s hold was verified, live check 4) while the
+   watchdog keeps running; if the button lands in time the turn continues exactly where it was,
+   with no re-planning. If not, the daemon answers `deny` with a reason written for the model
+   ("parked for the owner; end this turn now with your envelope; you will be woken with the
+   decision"), stores the request in `permission_requests`, and re-wakes the agent with the
+   decision when the button lands. "Approva per questo compito" stores an allow rule scoped to
+   the task id.
+3. **Daemon actions**, always a card: merge or push to a production branch (`merge_production`,
+   never expires); a **gated model or effort** (`config.gated`: Fable for any role, Opus/Fable or
+   an effort change on the research subagent): the `open_task` or model change is stored, the
+   card says "Ada chiede Fable per *<task>* · motivo: <reason>", and the task waits or runs one
+   rung below as the payload says; Approva spawns with the gated value in a new session, Nega or
+   expiry gives the lead a `system` note; the owner can always set any value from the Home tab
+   without a card. **The rung counter**: two `report`s with `tests_green: false` on the same
+   model/effort rung, or two rejected reviews, and the daemon refuses another turn on that rung;
+   the lead's only moves are to reopen one rung up (Sonnet/high → Opus/high → Fable/high, the
+   last through the owner's card) or to ask the owner. The lead decides, the daemon enforces.
 
 - **Runaway guards, per turn.** The wall-clock watchdog (`max_minutes` per role) is the one that
   always binds; `--max-budget-usd 5` (an estimate that stops the turn: verified to fire under a
@@ -587,9 +619,12 @@ Three tiers, each where the agent can only ask:
 ## 11. Development tasks
 
 1. The owner (or the ceo) asks the lead for something in `#<project>`.
-2. The lead `request(open_task, {title, kind: develop|review, model})`. The daemon creates the
-   task row, the thread in `#<project>-work`, a git worktree from the work branch, and the job
-   agent row (`dev-<n>` with the next display name from `job_names`).
+2. The lead `request(open_task, {title, kind: develop|review|design, preset|model+effort,
+   reason})`, choosing from the role's menu (presets on the task card: `piccolo` Sonnet/medium,
+   `normale` Sonnet/high, `difficile` Opus/high). The daemon creates the task row, the thread in
+   `#<project>-work`, a git worktree from the work branch, and the job agent row (`dev-<n>`,
+   `designer-<n>` with the next display name from `job_names`). A rung change later is a new
+   session for the job agent (a mid-session switch invalidates the cache [verified]).
 3. The lead's next envelope carries the brief addressed to the job agent. The agent works in the
    worktree, spawning `research`/`design` subagents inside its turn when useful; it reports with
    a `report` message (five lines) and the file `reports/<task>.md`.
@@ -600,24 +635,32 @@ Three tiers, each where the agent can only ask:
    delivers the report to the lead.
 
 The protocol content lives in the roles' `AGENT.md` files and ships with the repo: lean briefs,
-one deliverable per task, tests green before a report, review findings separated by provenance,
+one deliverable per task, tests green before a report (`tests_green` in the envelope), the
+escalation ladder ("after two rejections or two rounds without progress on the same brief,
+reopen one rung up; if the top rung fails, ask the owner"), the parked-permission rule ("a deny
+that says parked ends your turn: send the envelope, you will be woken"), review findings separated by provenance,
 staging explicit paths, `parked` for discoveries outside the task, and the **never-add list** of
 principle 8.
 
 ## 12. Roles in v1
 
-| role | kind | model / effort | tools kept | stripped | subagents | notes |
+| role | kind | default model / effort | lead's menu at `open_task` | tools kept | stripped | notes |
 |---|---|---|---|---|---|---|
-| ceo | standing | sonnet / low | agentopolis | Edit, Write, NotebookEdit, Bash | research | the owner's concierge; proposes hires as asks; conditional digest on its declared schedule; thin until the second project |
-| lead | standing per project | opus / high | agentopolis, github, repo cwd | Edit, Write, NotebookEdit | research, design | product owner + engineering lead; briefs; picks the developer's model per task; merges to the work branch |
-| developer | job | opus / xhigh (sonnet for small tasks, the lead's call) | agentopolis, repo cwd | WebSearch, WebFetch | research, design | one deliverable per task, worktree, tests green before report |
-| reviewer | job | opus / high | agentopolis, repo cwd read-only | Edit, Write, NotebookEdit, WebSearch, WebFetch | none | findings by provenance; never edits; fresh context is the point |
+| ceo | standing | Sonnet / medium | fixed (owner, Home tab) | agentopolis, research | Edit, Write, NotebookEdit, Bash | the owner's concierge; proposes hires as asks; conditional digest; thin until the second project |
+| lead | standing per project | Opus / high | fixed (owner, Home tab) | agentopolis, github, repo cwd, research | Edit, Write, NotebookEdit | product owner + engineering lead; briefs; picks the job agents' rung from the menu; merges to the work branch |
+| developer | job | Sonnet / high | Sonnet, Opus · medium, high | agentopolis, repo cwd, research | WebSearch, WebFetch | one deliverable per task, worktree, `tests_green` in the report |
+| reviewer | job | Opus / medium | Sonnet, Opus · medium, high | agentopolis, repo cwd read-only | Edit, Write, NotebookEdit, WebSearch, WebFetch | findings by provenance; never edits; a different model than the writer by default |
+| designer | job | Sonnet / high | Sonnet, Opus · medium, high | agentopolis, worktree (writes under `design/`), research | Bash outside `design/` | mockups (HTML), flows, interface note under `design/`; its own thread and report the owner reviews |
 
-Subagents (`roles/<role>/subagents/*.md`, passed with `--agents`): `research` (Haiku, read-only,
-web fetch and search, returns a sourced file under `reports/`), `design` (Opus, writes only under
-`design/`, returns HTML mockups and an interface note). They run inside the calling agent's turn
-and cost that agent's guards; their reports are inputs the calling agent verifies, never
-evidence on their own.
+No role uses `xhigh` (owner, 2026-09-19). Fable needs the owner's card for every role (section
+10). Rationale: operators run a loop whose oracle is the test runner, so the smaller model at high
+effort is the default and the lead escalates on evidence; the reviewer gains from being a
+different model than the writer; the ceo has no problem to solve.
+
+Subagent (`roles/<role>/subagents/research.md`, passed with `--agents`): `research`, Sonnet /
+medium, read-only, web fetch and search, returns a sourced file under `reports/`. It runs inside
+the calling agent's turn and costs that agent's guards; its report is an input the calling agent
+verifies, never evidence on its own. Opus or Fable on it, or an effort change, are gated.
 
 Effort and model are set at spawn only; a change from the Home tab starts a fresh session (a
 mid-session switch invalidates the whole cache [verified]). Each role ships `role.yaml` and
@@ -634,7 +677,9 @@ buttons; stderr goes behind "Dettagli tecnici".
 | `result` fails the envelope schema after the CLI's retries (`error_max_structured_output_retries`) | turn = failed; the raw result text is kept in the run file; same owner message |
 | `result.subtype` = `error_max_budget_usd` / `error_max_turns` | turn = budget_exhausted / max_turns; queued messages start a new turn with their own guards |
 | wall-clock watchdog fires | SIGINT → grace → SIGKILL group; turn = timed_out; same owner message as a failure |
-| `rate_limit_event` says the subscription window is exhausted, or `api_retry` with `rate_limit`/`overloaded` persists | **limit pause**: no new turns; one owner message, edited in place with each change; turns resume at the event's `resetsAt`; no probe process |
+| `rate_limit_event` reports `allowed_warning` or a window above 90% | **back-off**: `max_concurrent_turns` drops to 1 until the window resets; nothing else changes |
+| `rate_limit_event` says the subscription window is exhausted, or `api_retry` with `rate_limit`/`overloaded` persists | **limit pause**: no new turns; one owner message, edited in place with each change; turns resume at the event's `resetsAt`; no probe process; the Home tab counts the hours paused this month. There is no paid overflow (owner: "free or nothing") |
+| `system/compact_boundary` in a turn's stream | a `system` line on the task card ("contesto compattato"), so the owner knows why an agent may repeat itself; compaction is lossy and expected |
 | Slack unreachable | outbox rows wait with backoff; nothing is dropped; the Home tab shows "Slack non raggiungibile da hh:mm" once it is back |
 | malformed role/agent/project file | rejected with a message in the ceo's direct message naming the file and the error; last valid snapshot stays loaded |
 | result without cost | `cost_microusd = null`; shown as "sconosciuto"; never estimated |
@@ -747,3 +792,13 @@ recorded here.
    2026-09-18, claude 2.1.276, on the Mac; re-check on the VPS's CLI version in slice 7].
 7. Does a tool-heavy turn still return a valid envelope on the first try, and how often does the
    CLI's structured-output retry fire? [pending, slice 4]
+8. Fable under the subscription: (a) `--model` with Fable starts under the subscription login and
+   `system/init` reports it; (b) that turn's `result` cost is priced with Fable's list, so the
+   Home tab shows it right; (c) a `--agents` JSON with `model: opus` on `research` is honoured per
+   spawn; (d) does the installed CLI have a settings key that caps effort (`maxEffortLevel` was
+   cited from the 2.1.267 notes)? If so the daemon passes it in `--settings` and "no xhigh" is
+   enforced, not written. [pending, slice 4]
+9. Cache TTL weight on the subscription: the API prices a 1 h cache write at 2× and a 5 m write
+   at 1.25×; run the same two-turn script with `CLAUDE_CODE_PROMPT_CACHE_TTL` at `5m` and at
+   `1h` and compare the `result` costs. If 1 h costs twice on write, job agents (bursty) may
+   default to 5 m and standing agents to 1 h. [pending, slice 4]
