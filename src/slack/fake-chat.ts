@@ -8,16 +8,23 @@ import {
   type PostArgs,
   type Posted,
 } from "../ports/chat.js";
-import { assertUniqueIds } from "./limits.js";
+import { assertUniqueIds, assertValues, EmptyValueError } from "./limits.js";
 
 export type RecordedCall = { method: keyof Chat; args: unknown };
 
-/** what the real Slack refuses with invalid_blocks: duplicate action_ids / block_ids */
+/**
+ * what the real Slack refuses: duplicate action_ids / block_ids (invalid_blocks) and an
+ * empty `value` on a button or option (invalid_arguments)
+ */
 function refuseInvalidBlocks(blocks: unknown): void {
   if (!Array.isArray(blocks)) return;
   try {
     assertUniqueIds(blocks);
+    assertValues(blocks);
   } catch (e) {
+    if (e instanceof EmptyValueError) {
+      throw new ChatError(`invalid_arguments: ${e.message}`, "invalid_arguments");
+    }
     throw new ChatError(`invalid_blocks: ${(e as Error).message}`, "invalid_blocks");
   }
 }

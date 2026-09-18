@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertBlocks,
   assertUniqueIds,
+  assertValues,
   LIMITS,
   splitText,
   truncateButton,
@@ -113,5 +114,42 @@ describe("assertBlocks / truncateButton", () => {
     expect(() => assertBlocks([{ type: "actions", elements: [btn("x"), btn("x")] }], 50)).toThrow(
       /already exists/,
     );
+  });
+  it("refuses an empty value on a button, an overflow option or a select option, like Slack (invalid_arguments)", () => {
+    expect(() =>
+      assertValues([
+        { type: "section", accessory: { type: "button", action_id: "go", value: "" } },
+      ]),
+    ).toThrow(/blocks\/0\/accessory has an empty value/);
+    expect(() =>
+      assertValues([
+        {
+          type: "actions",
+          elements: [
+            { type: "overflow", action_id: "m", options: [{ value: "a" }, { value: "" }] },
+          ],
+        },
+      ]),
+    ).toThrow(/option 1 of overflow/);
+    expect(() =>
+      assertValues([
+        {
+          type: "actions",
+          elements: [{ type: "static_select", action_id: "s", options: [{ value: "" }] }],
+        },
+      ]),
+    ).toThrow(/option 0 of static_select/);
+    expect(() =>
+      assertValues([
+        { type: "actions", elements: [{ type: "button", action_id: "ok", value: "x" }] },
+        { type: "section", text: { type: "mrkdwn", text: "no accessory" } },
+      ]),
+    ).not.toThrow();
+    expect(() =>
+      assertBlocks(
+        [{ type: "section", accessory: { type: "button", action_id: "go", value: "" } }],
+        50,
+      ),
+    ).toThrow(/empty value/);
   });
 });

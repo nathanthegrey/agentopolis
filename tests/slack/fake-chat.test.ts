@@ -62,8 +62,8 @@ describe("FakeChat", () => {
       {
         type: "actions",
         elements: [
-          { type: "button", action_id: "answer" },
-          { type: "button", action_id: "answer" },
+          { type: "button", action_id: "answer", value: "v" },
+          { type: "button", action_id: "answer", value: "v" },
         ],
       },
     ];
@@ -84,8 +84,8 @@ describe("FakeChat", () => {
           {
             type: "actions",
             elements: [
-              { type: "button", action_id: "a:0" },
-              { type: "button", action_id: "a:1" },
+              { type: "button", action_id: "a:0", value: "v0" },
+              { type: "button", action_id: "a:1", value: "v1" },
             ],
           },
         ],
@@ -107,5 +107,22 @@ describe("FakeChat", () => {
     expect(await chat.botUserId("ada")).toBe("UB_ADA");
     expect(await chat.botUserId()).toBe("UB_COMPANY");
     expect(chat.calls.at(-1)).toEqual({ method: "botUserId", args: { as: "company" } });
+  });
+
+  it("refuses an empty button value with invalid_arguments, in messages and views, like the real Slack", async () => {
+    const chat = new FakeChat();
+    const empty = [
+      {
+        type: "section",
+        text: { type: "mrkdwn", text: "p" },
+        accessory: { type: "button", action_id: "home_go:x", value: "" },
+      },
+    ];
+    await expect(chat.publishHome("U1", { type: "home", blocks: empty })).rejects.toMatchObject({
+      code: "invalid_arguments",
+    });
+    await expect(chat.post({ channel: "C1", text: "x", blocks: empty })).rejects.toMatchObject({
+      code: "invalid_arguments",
+    });
   });
 });

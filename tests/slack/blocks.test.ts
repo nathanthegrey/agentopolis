@@ -183,6 +183,24 @@ describe("homeView", () => {
     expect(s).toContain("Assumi");
     expect(s).not.toContain("Costi");
   });
+  it("a project without a channel yet still gets a non-empty button value (the slug); no accessory is ever empty", () => {
+    const v = homeView({
+      ...base,
+      projects: [{ slug: "agentopolis", name: "Agentopolis", channel: "" }],
+      agents: [agent(1)],
+    }) as {
+      blocks: (Block & {
+        accessory?: { type: string; value?: string; options?: { value: string }[] };
+      })[];
+    };
+    const accessories = v.blocks.map((b) => b.accessory).filter(Boolean);
+    expect(accessories.length).toBeGreaterThan(0);
+    for (const a of accessories) {
+      if (a?.type === "button") expect(a.value?.length).toBeGreaterThan(0);
+      for (const o of a?.options ?? []) expect(o.value.length).toBeGreaterThan(0);
+    }
+    expect(JSON.stringify(v.blocks)).toContain('"value":"agentopolis"');
+  });
   it("every agent row has the five-entry overflow menu with op:agent values", () => {
     const v = homeView({ ...base, agents: [agent(1)] }) as {
       blocks: (Block & {
