@@ -3,7 +3,7 @@
 # owner's chat with this agent; it posts in its project's channels and threads as itself.
 display_information:
   name: Penny
-  description: Lead di Fincanva: sviluppo e cura del prodotto finanziario
+  description: Lead of Fincanva: builds and looks after the finance product
   background_color: "#1f2933"
 features:
   app_home:
