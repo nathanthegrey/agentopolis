@@ -20,37 +20,12 @@ features:
       description: Assumi un agente
       should_escape: false
     - command: /edit
-      description: Modifica un agente (SOUL, JOB, MEMORY)
+      description: Modifica un agente (AGENT.md o MEMORY.md)
       usage_hint: "<agente>"
-      should_escape: false
-    - command: /pause
-      description: Metti in pausa un agente
-      usage_hint: "<agente>"
-      should_escape: false
-    - command: /resume
-      description: Riattiva un agente
-      usage_hint: "<agente>"
-      should_escape: false
-    - command: /model
-      description: Cambia modello a un agente
-      usage_hint: "<agente> <modello>"
-      should_escape: false
-    - command: /budget
-      description: Cambia budget mensile a un agente
-      usage_hint: "<agente> <usd>"
-      should_escape: false
-    - command: /costs
-      description: Costi stimati del mese per agente
-      should_escape: false
-    - command: /pulse
-      description: Stato del demone e degli agenti
       should_escape: false
     - command: /diag
       description: Ultimo turno di un agente
       usage_hint: "<agente>"
-      should_escape: false
-    - command: /rollback
-      description: Annulla una delle ultime cinque modifiche
       should_escape: false
 oauth_config:
   scopes:

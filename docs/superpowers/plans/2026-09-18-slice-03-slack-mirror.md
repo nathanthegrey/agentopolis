@@ -129,9 +129,9 @@ throws `persona message is immutable` otherwise (this is how the tests enforce t
 
 **Interfaces (all return `{ text: string; blocks: Blocks }` unless noted):**
 - `askCard({ renderId, persona, question, context, options })` — `section` (question ≤ 2
-  lines), `context` ("<persona> chiede · <project> · budget <x> €"), `actions` with ≤ 3
-  `button`s (`action_id: "answer"`, `value: "<renderId>:<index>"`) plus **Più tardi**
-  (`action_id: "snooze"`); > 3 options → `static_select` + **Conferma**. Text of the message
+  lines), `context` ("<persona> chiede · <project>"), `actions` with ≤ 3 `button`s
+  (`action_id: "answer"`, `value: "<renderId>:<index>"`); > 3 options → `static_select` +
+  **Conferma**. No snooze button and no re-mention: an open ask stays open (spec section 9). Text of the message
   = the question (notification preview).
 - `answeredCard(card, { chosen, by, at })` — same section, actions replaced by a `context`
   line "✅ Scelto: … · da <by> alle hh:mm".
@@ -140,19 +140,21 @@ throws `persona message is immutable` otherwise (this is how the tests enforce t
   `confirm` when `destructive`), **Dettagli** (`action_id: "details"`); `value` carries
   `"<renderId>:<epoch>"`.
 - `decidedCard(card, { outcome: "approvato" | "negato" | "scaduta", by, at, reopen: boolean })`.
-- `taskCard({ title, state, budgetUsedMicro, budgetMicro, agents })` and `taskCardUpdate`.
+- `taskCard({ title, state, costMicro, agents })` and `taskCardUpdate`.
 - `statusLine({ display, seconds })` → text only; `receipt({ display, seconds, costMicro | null })`.
 - `replyPrompt({ renderId, persona, text, mention })` — persona text + mention; the
   **Rispondi** button lives on a separate app-identity line built by `replyButton(renderId)`.
-- `homeView({ month, spentMicro, budgetMicro, waiting, projects, agents, updatedAt })` — the
-  layout of spec section 9 (agents as `fields`, ≤ 10 per section, cut at 100 blocks with an
-  "…e altri N" line).
-- `hireModal(defaults)`, `editModal({ agent, file, initial })`, `replyModal({ renderId, question })`
+- `homeView({ month, spentMicro, waiting, projects, agents, parked, updatedAt })` — the layout
+  of spec section 9: cost "stimato" with no budget bar, agents as `fields` (≤ 10 per section)
+  each with an overflow (Pausa / Riattiva / Modello / Licenzia), parked discoveries with
+  **Apri come compito**, cut at 100 blocks with an "…e altri N" line.
+- `hireModal(defaults)` (no budget field), `editModal({ agent, file, initial })` where `file` is
+  `AGENT.md` or `MEMORY.md`, `replyModal({ renderId, question })`
   — ≤ 6 inputs, titles ≤ 24 chars, `private_metadata` JSON ≤ 3,000.
 - Every builder calls `assertBlocks` and `truncateButton`; every string shown to the owner is
   Italian and comes from one `strings.ts` table (so the wording lives in one place).
 
-- [ ] Steps: failing tests (button counts and ids; `static_select` beyond 3 options; value
+- [ ] Steps: failing tests (button counts and ids; no snooze button; `static_select` beyond 3 options; value
   format; danger+confirm on destructive; home cut at 100 blocks with 40 agents; modal input
   count and metadata size) → implement → PASS → commit `feat(slack): Block Kit builders for cards, home and modals`.
 
@@ -187,7 +189,8 @@ throws `persona message is immutable` otherwise (this is how the tests enforce t
   → `{ stop(): Promise<void>; tick(): Promise<number> }`. `tick()` is public for tests.
 - Kinds handled: `mirror.message` (load the message and its container; choose persona from
   the agent's `display`/`avatar` or app identity for `system`; add `<@owner>` only when
-  `kind === "ask"` and `to === "owner"` and the mention budget allows; thread into the task
+  `kind === "ask"` and `to === "owner"` (no hourly counter and no quiet hours: notification
+  timing is Slack's); thread into the task
   thread when the container has `slack_thread_ts`), `card.post` (app identity, blocks from
   payload), `card.update`, `home.publish`, `channel.create`, `channel.archive`, `status.set`.
 - Per-channel bucket: at most one send per second per channel (FakeClock-driven); rows for
@@ -272,16 +275,17 @@ and in a comment at the top of `app.ts`.
   channel, invite the owner, set the topic, insert the `containers` row (`kind: standing`,
   members `[agent, "owner"]`, `default_to: agent`). Idempotent.
 - `DaemonActions` port (implemented by slice 4; faked here): `hire(form)`, `edit(agent, file,
-  text)`, `pause(agent)`, `resume(agent)`, `setModel(agent, model)`, `setBudget(agent,
-  micro)`, `costs()`, `status()`, `diag(agent)`, `rollback(index)`, `answer(renderId, index,
-  user)`, `snooze(renderId)`, `approve(renderId, epoch, scope)`, `deny(renderId, epoch)`,
-  `reply(renderId, text)`.
-- `dispatchCommand(inbound, actions, chat)`: `/agentopolis` → publish Home; `/hire` → open
-  `hireModal`; `/edit <agent>` → open `editModal` with the file's current text; `/pause` … map
-  1:1 to `DaemonActions`; unknown → ephemeral usage text in Italian. Every command answers
-  ephemerally when the reply is only for the owner.
-- `dispatchButton(inbound, actions, chat)`: `answer`, `snooze`, `approve`, `approve_task`,
-  `deny`, `details` (open a modal with the render's payload), `reply` (open `replyModal`).
+  text)`, `undoEdit(agent)`, `pause(agent)`, `resume(agent)`, `setModel(agent, model)`,
+  `retire(agent)`, `diag(agent)`, `openParked(taskId)`, `answer(renderId, index, user)`,
+  `approve(renderId, epoch, scope)`, `deny(renderId, epoch)`, `reply(renderId, text)`.
+- `dispatchCommand(inbound, actions, chat)`: exactly four commands. `/agentopolis` → publish
+  Home; `/hire` → open `hireModal`; `/edit <agent>` → open `editModal` with the file's current
+  text (`AGENT.md` or `MEMORY.md`); `/diag <agent>` → ephemeral diagnostics; unknown → ephemeral
+  usage text. Pause, resume, model, retire and "open parked as task" live in the Home tab's
+  overflow menus (`block_actions` with `action_id` `agent_menu` / `parked_open`).
+- `dispatchButton(inbound, actions, chat)`: `answer`, `approve`, `approve_task`, `deny`,
+  `details` (open a modal with the render's payload), `reply` (open `replyModal`),
+  `agent_menu` (overflow selections), `parked_open`, `undo_edit`.
 - `dispatchView(inbound, actions, chat)`: `hire`, `edit`, `reply` submissions; validation
   errors returned as `{ response_action: "errors", errors: { [block_id]: message } }`.
 
