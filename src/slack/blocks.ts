@@ -305,7 +305,11 @@ export function hireModal(d: { roles: string[]; projects: string[]; models: stri
   );
 }
 
-export function editModal(d: { agent: string; file: string; initial: string }): unknown {
+/** the two files the owner edits from Slack (spec section 9); prose files are edited in git */
+export type EditableFile = "AGENT.md" | "MEMORY.md";
+export const EDITABLE_FILES: readonly EditableFile[] = ["AGENT.md", "MEMORY.md"];
+
+export function editModal(d: { agent: string; file: EditableFile; initial: string }): unknown {
   return modal(
     "edit",
     S.edit.title(d.file),

@@ -2,7 +2,7 @@
 // for the owner is ephemeral. The actions themselves live behind a port (slice 4).
 import type { Snapshot } from "../config/loader.js";
 import type { Chat } from "../ports/chat.js";
-import { editModal, hireModal, replyModal } from "./blocks.js";
+import { EDITABLE_FILES, type EditableFile, editModal, hireModal, replyModal } from "./blocks.js";
 import type { Inbound } from "./inbox.js";
 import { S } from "./strings.js";
 
@@ -43,8 +43,6 @@ type Command = Extract<Inbound, { kind: "command" }>;
 type Button = Extract<Inbound, { kind: "button" }>;
 type View = Extract<Inbound, { kind: "view_submitted" }>;
 
-const EDITABLE = new Set(["SOUL.md", "JOB.md", "MEMORY.md"]);
-
 const say = (chat: Chat, channel: string, user: string, text: string) =>
   chat.postEphemeral({ channel, user, text });
 
@@ -79,8 +77,8 @@ export async function dispatchCommand(
     case "edit": {
       const agent = await agentOr(arg1);
       if (!agent) return;
-      const file = `${(arg2 ?? "SOUL").toUpperCase().replace(/\.MD$/, "")}.md`;
-      if (!EDITABLE.has(file)) return reply(S.usage);
+      const file = `${(arg2 ?? "AGENT").toUpperCase().replace(/\.MD$/, "")}.md` as EditableFile;
+      if (!EDITABLE_FILES.includes(file)) return reply(S.usage);
       const initial = await actions.currentText(agent, file);
       return chat.openModal(c.triggerId, editModal({ agent, file, initial }));
     }

@@ -83,8 +83,15 @@ describe("dispatchCommand", () => {
     const f = fakeActions();
     await dispatchCommand(command("agentopolis"), f.actions, chat, ctx);
     await dispatchCommand(command("hire"), f.actions, chat, ctx);
-    await dispatchCommand(command("edit", "ceo JOB"), f.actions, chat, ctx);
-    expect(chat.calls.map((c) => c.method)).toEqual(["publishHome", "openModal", "openModal"]);
+    await dispatchCommand(command("edit", "ceo MEMORY"), f.actions, chat, ctx);
+    await dispatchCommand(command("edit", "ceo"), f.actions, chat, ctx); // default AGENT.md
+    await dispatchCommand(command("edit", "ceo SOUL"), f.actions, chat, ctx); // not editable here
+    expect(chat.calls.filter((c) => c.method !== "postEphemeral").map((c) => c.method)).toEqual([
+      "publishHome",
+      "openModal",
+      "openModal",
+      "openModal",
+    ]);
     const edit = chat.calls[2]?.args as {
       view: {
         callback_id: string;
@@ -93,8 +100,11 @@ describe("dispatchCommand", () => {
       };
     };
     expect(edit.view.callback_id).toBe("edit");
-    expect(JSON.parse(edit.view.private_metadata)).toEqual({ agent: "ceo", file: "JOB.md" });
-    expect(edit.view.blocks[0]?.element.initial_value).toBe("text of ceo/JOB.md");
+    expect(JSON.parse(edit.view.private_metadata)).toEqual({ agent: "ceo", file: "MEMORY.md" });
+    expect(edit.view.blocks[0]?.element.initial_value).toBe("text of ceo/MEMORY.md");
+    const byDefault = chat.calls[3]?.args as { view: { private_metadata: string } };
+    expect(JSON.parse(byDefault.view.private_metadata)).toEqual({ agent: "ceo", file: "AGENT.md" });
+    expect(ephemerals(chat).at(-1)).toMatch(/Comandi:/);
   });
   it("maps agent commands 1:1 with parsed arguments and answers ephemerally", async () => {
     const chat = new FakeChat();
@@ -225,7 +235,7 @@ describe("dispatchView", () => {
   it("edit and reply submissions reach their actions with the metadata", async () => {
     const f = fakeActions();
     await dispatchView(
-      view("edit", { agent: "ceo", file: "SOUL.md" }, { text: "nuovo testo" }),
+      view("edit", { agent: "ceo", file: "AGENT.md" }, { text: "nuovo testo" }),
       f.actions,
       new FakeChat(),
       ctx,
@@ -237,7 +247,7 @@ describe("dispatchView", () => {
       ctx,
     );
     expect(f.calls).toEqual([
-      { name: "edit", args: ["ceo", "SOUL.md", "nuovo testo"] },
+      { name: "edit", args: ["ceo", "AGENT.md", "nuovo testo"] },
       { name: "reply", args: [5, "rosso", OWNER] },
     ]);
   });

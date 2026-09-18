@@ -217,11 +217,11 @@ describe("modals", () => {
   it("editModal carries agent and file in private_metadata within the cap", () => {
     const v = editModal({
       agent: "agentopolis-lead",
-      file: "SOUL.md",
+      file: "AGENT.md",
       initial: "x".repeat(1500),
     }) as { blocks: Block[]; private_metadata?: string; callback_id: string };
     expect(v.callback_id).toBe("edit");
-    expect(JSON.parse(meta(v))).toEqual({ agent: "agentopolis-lead", file: "SOUL.md" });
+    expect(JSON.parse(meta(v))).toEqual({ agent: "agentopolis-lead", file: "AGENT.md" });
     expect(meta(v).length).toBeLessThanOrEqual(LIMITS.privateMetadata);
     expect(inputs(v)).toHaveLength(1);
   });
