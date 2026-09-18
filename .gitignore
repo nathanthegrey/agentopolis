@@ -4,3 +4,8 @@ data/
 secrets*
 .env*
 .DS_Store
+dist/
+*.db
+*.db-wal
+*.db-shm
+runs/
