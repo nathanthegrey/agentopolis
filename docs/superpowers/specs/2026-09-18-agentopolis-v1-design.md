@@ -97,14 +97,14 @@ recorded road and not a closed door).
    - the composed prompt has a stable order (style, role, project) so the prompt cache covers it;
      memory and project knowledge travel as the first user message of a session, not in the
      system prompt, so a memory write cannot invalidate the prefix;
-   - a session is rotated (fresh id, seeded from a pack the daemon builds from the store and
-     `MEMORY.md` at that moment) when its input passes 120,000 tokens or it is 30 days old, and
-     `CLAUDE_CODE_AUTO_COMPACT_WINDOW=100000` caps what the CLI itself will carry (the default
-     compaction point is ~967,000 tokens [verified]; the variable's minimum is 100,000 [verified]);
+   - the CLI's own auto-compaction keeps a session bounded: `CLAUDE_CODE_AUTO_COMPACT_WINDOW=100000`
+     (the default compaction point is ~967,000 tokens [verified]; the variable's minimum is
+     100,000 [verified]); there is no daemon-side session rotation in v1;
    - status lines, receipts, costs, the Home tab are written by the daemon: zero tokens;
    - no heartbeat, no unrequested digest; the ceo is never copied on owner ⇄ lead traffic;
-   - `--max-budget-usd` and `--max-turns` per turn plus a wall-clock watchdog kill a runaway
-     loop; they are guards, not budgets;
+   - a wall-clock watchdog per turn (`max_minutes`, the one knob a role has) plus two fixed
+     daemon constants passed as `--max-budget-usd 5` and `--max-turns 60` kill a runaway loop;
+     they are guards, not budgets, and nobody tunes them;
    - a task's close delivers the report to the lead, never the thread.
 
 ## 3. Architecture
@@ -152,7 +152,7 @@ Modules, each one job, each behind a port with a permanent fake (`Store`, `Clock
 ## 4. Home folder
 
 ```
-~/agentopolis/                      git repository; the daemon commits its own changes
+~/agentopolis/                      a folder the owner may keep under git by hand; the daemon never runs git here
   config.yaml
   STYLE.md         shared voice for every agent: tu form, decision first, ≤5 lines, terms defined
   roles/<role>/
@@ -190,10 +190,7 @@ permissions:
   deny:  ["Bash(rm -rf *)"]
   hooks:                  # PreToolUse absolutes, injected via --settings; exit 2 = hard deny
     - deny_push_to_production
-guards:
-  per_turn_usd: 5         # --max-budget-usd for each turn (a runaway guard, not a budget)
-  max_turns: 60           # --max-turns for each turn
-  max_wall_clock_minutes: 45
+max_minutes: 45           # the wall-clock watchdog; the only guard a role configures
 requests: [open_task, close_task, merge_production]
 ```
 
@@ -329,7 +326,7 @@ claude -p --output-format stream-json --input-format stream-json --verbose
   --session-id <uuid allocated and stored before spawn>   (first turn)
   --resume <session_id>                                   (later turns)
   --model <role/agent model> [--effort <level>]
-  --max-turns <guards.max_turns> --max-budget-usd <guards.per_turn_usd>
+  --max-turns 60 --max-budget-usd 5                       (fixed daemon constants)
   --permission-mode <role mode> --allowedTools <…> --disallowedTools <bare names>
   --permission-prompt-tool stdio
   --permission-prompts host
@@ -362,8 +359,8 @@ Rules:
   prompt still hits the cache; an edited one costs one uncached turn and applies [live
   2026-09-18: the second answer followed the edited prompt; 15,917 tokens read from cache,
   4,067 rewritten].
-- The first user message of a session (never the system prompt) carries `MEMORY.md`, the
-  project's `knowledge/` and, on a rotation, the pack the daemon built.
+- The first user message of a session (never the system prompt) carries `MEMORY.md` and the
+  project's `knowledge/`.
 - The turn's user message is the first stdin line; stdin stays open until the `result` line
   because permission answers travel on it [measured].
 - The runner parses the stream: `rate_limit_event` (utilization and reset per window, emitted
@@ -378,7 +375,7 @@ Rules:
   to `runs/<turn-id>.ndjson`.
 - Ending a turn early is SIGINT to the process group, then a grace period, then SIGKILL to the
   group; SIGTERM loses the turn's cost record (exit 143 [documented]) and is used only on daemon
-  shutdown. The wall-clock watchdog (`guards.max_wall_clock_minutes`) fires the same sequence,
+  shutdown. The wall-clock watchdog (`max_minutes`) fires the same sequence,
   because `--max-turns` exhaustion has been reported to produce no result at all.
 - One process per turn is a choice, not a constraint: the CLI can take further user messages on
   stdin [measured]. It is chosen for a trivial crash model and bounded memory (~200 MB per idle
@@ -484,9 +481,10 @@ open.
   payload and expires in 3 seconds): at most six inputs, defaults pre-filled from `role.yaml`,
   `radio_buttons` never beyond 10 options, `private_metadata` ≤3000 characters, validation
   errors as `response_action: errors`. `/edit <agent>` opens `AGENT.md` or `MEMORY.md` in a
-  multiline field; on submit the daemon writes, commits, and posts a card "AGENT.md di Leo
-  aggiornato · +3 −1 righe" with **Vedi differenze** (modal, code block) and **Annulla** (git
-  revert, card edited to confirm). Anything over ~2,000 characters gets a GitHub link instead.
+  multiline field; on submit the daemon stores the previous content in the `events` row, writes
+  the file, and posts a card "AGENT.md di Leo aggiornato · +3 −1 righe" with **Vedi differenze**
+  (modal, code block) and **Annulla** (writes the stored previous content back, card edited to
+  confirm). Anything over ~2,000 characters is edited in the file directly.
 
 ### Slash commands (manifest `features.slash_commands`)
 
@@ -565,9 +563,10 @@ Three tiers, each where the agent can only ask:
 3. **Daemon actions** for the gated request kinds: merge or push to a production branch. Always
    a card; `merge_production` never expires.
 
-- **Runaway guards, per turn.** `--max-budget-usd` (from `guards.per_turn_usd`, an estimate that
-  stops the turn: verified to fire under a subscription login, live check 5), `--max-turns`, and
-  the wall-clock watchdog. None is a budget and none is relied on alone.
+- **Runaway guards, per turn.** The wall-clock watchdog (`max_minutes` per role) is the one that
+  always binds; `--max-budget-usd 5` (an estimate that stops the turn: verified to fire under a
+  subscription login, live check 5) and `--max-turns 60` are fixed daemon constants. None is a
+  budget.
 - **Costs are shown, never gated.** Per agent and per month in the Home tab and on receipts,
   always "stimato". There is no monthly budget in v1 (owner, 2026-09-18).
 - **Pause.** A paused agent gets no turns; the pending set waits; unpause runs one turn that reads
@@ -610,7 +609,7 @@ web fetch and search, returns a sourced file under `reports/`), `design` (Opus, 
 and cost that agent's guards; their reports are inputs the calling agent verifies, never
 evidence on their own.
 
-Effort and model are set at spawn only; a change from the Home tab rotates the session (a
+Effort and model are set at spawn only; a change from the Home tab starts a fresh session (a
 mid-session switch invalidates the whole cache [verified]). Each role ships `role.yaml` and
 `AGENT.md`; `STYLE.md` at the repo root is composed before `AGENT.md` into every prompt.
 
@@ -631,7 +630,7 @@ buttons; stderr goes behind "Dettagli tecnici".
 | result without cost | `cost_microusd = null`; shown as "sconosciuto"; never estimated |
 | approval never answered | expires per section 10; card edited |
 | daemon restart | running turns become `interrupted` (never re-run automatically; the agent gets a `system` note that its turn was cut and the channel is the truth); orphan `claude` processes with an `AGENTOPOLIS_TURN_ID` are reaped; pending wakes replay from the store; open cards re-rendered |
-| `--resume` fails ("No conversation found", or no `system/init`) | start fresh with a pack built from the store and `MEMORY.md`, with a `system` note; never loop |
+| `--resume` fails ("No conversation found", or no `system/init`) | start a fresh session (first user message = `MEMORY.md` + knowledge + the last 20 messages of its containers from the store), with a `system` note; never loop |
 | agentopolis MCP server `failed`/`needs-auth` at init | turn failed; `pending` is not a failure |
 | cache hit ratio of a resumed turn below 0.7 twice running | `system` message in `#ceo`: something in the prefix is moving |
 
@@ -642,15 +641,13 @@ plus `MemoryMax=` in the unit; shutdown = stop wakes, close the Slack socket, bo
 `Type=notify` (READY after migrations and Slack connect), `WatchdogSec` pinged from the scheduler
 tick, `KillMode=mixed`, `TimeoutStopSec` above the drain, `Restart=always`, `EnvironmentFile=`
 mode 0600. `/healthz` on localhost: running turns, queue depth, last Slack event age, WAL bytes.
-Litestream replicates the database off the box.
+A nightly cron copies the database with `sqlite3 .backup` to a dated file and keeps 14; that is
+the whole backup story in v1.
 
-Observability: pino to stdout (journald), token-shaped values redacted; one OpenTelemetry trace
-per turn (`agent.turn` with children for prompt build, spawn, each tool call, each Slack call;
-prompt and response content in span events, never attributes); `trace_id` on `turns` and
-`events`; metrics `turn_duration_seconds`, `wake_to_turn_start_seconds`, `turns_running`,
-`pending_messages`, `outbox_depth`, `outbox_oldest_age_seconds`, `slack_api_errors_total`,
-`cli_exit_code_total`, `turn_cost_microusd_total`, `sqlite_wal_bytes`, `cache_hit_ratio`.
-`/healthz` and `/diag` expose them; the Home tab shows the ones the owner can act on.
+Observability: pino to stdout (journald), token-shaped values redacted, one line per state
+transition; `/healthz` (running turns, queue depth, last Slack event age, WAL bytes) and `/diag`.
+No tracing and no metrics pipeline in v1: the `turns` and `events` tables answer every question
+the owner has asked so far.
 
 ## 14. Testing
 
@@ -704,9 +701,9 @@ All of these hold on the VPS, with the real CLI and the owner's Slack workspace:
 ## 16. Stack
 
 TypeScript on Node LTS, pnpm, Bolt for JavaScript (Socket Mode), better-sqlite3 + Drizzle,
-zod + yaml, chokidar, croner, p-limit, pino, `@opentelemetry/*`, sd-notify,
-`@modelcontextprotocol/sdk` (the per-turn MCP server only), vitest, fast-check, Biome,
-Litestream, a systemd unit under `deploy/`. No agent framework and no Claude SDK: the daemon is a
+zod + yaml, chokidar, croner, p-limit, pino, sd-notify, `@modelcontextprotocol/sdk` (the
+per-turn MCP server only), vitest, fast-check, Biome, a systemd unit and a backup cron under
+`deploy/`. No agent framework and no Claude SDK: the daemon is a
 direct NDJSON peer of the CLI. One package; folders `src/<module>/` mirror section 3.
 
 ## 17. Assumptions to confirm with the owner
