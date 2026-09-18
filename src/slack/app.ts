@@ -17,10 +17,11 @@ export type SlackAppOptions = {
   db: Db;
   clock: Clock;
   ownerUserId: string;
+  /** returns a value only for view submissions that must be acked with an errors response */
   onInbound: (
     inbound: Inbound,
     ctx: { inboxId: number; inserted: boolean },
-  ) => Promise<void> | void;
+  ) => Promise<unknown> | unknown;
   log?: (line: string, extra?: Record<string, unknown>) => void;
   /** tests: skip auth.test and the socket; listeners are driven with app.processEvent */
   offline?: { botId: string; botUserId: string };
@@ -49,11 +50,16 @@ export function createSlackApp(o: SlackAppOptions): SlackApp {
   });
   const chat = new BoltChat(app.client as unknown as SlackClient);
 
-  const deliver = async (h: { id: number; inserted: boolean; inbound: Inbound }) => {
+  const deliver = async (h: {
+    id: number;
+    inserted: boolean;
+    inbound: Inbound;
+  }): Promise<unknown> => {
     try {
-      await o.onInbound(h.inbound, { inboxId: h.id, inserted: h.inserted });
+      return await o.onInbound(h.inbound, { inboxId: h.id, inserted: h.inserted });
     } catch (e) {
       log("onInbound failed", { inboxId: h.id, error: (e as Error).message });
+      return undefined;
     }
   };
 
@@ -76,8 +82,10 @@ export function createSlackApp(o: SlackAppOptions): SlackApp {
   });
   app.view(/.*/, async ({ body, ack }) => {
     const h = handleView(o.db, o.clock, body); // durable first
-    await ack();
-    await deliver(h);
+    // a view is acked with its validation result, so dispatch runs between write and ack
+    const response = await deliver(h);
+    const ackWith = ack as unknown as (response?: unknown) => Promise<void>;
+    await (response ? ackWith(response) : ack());
   });
   app.command(/\/.*/, async ({ body, ack }) => {
     const h = handleCommand(o.db, o.clock, body); // durable first

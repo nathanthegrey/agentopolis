@@ -22,6 +22,10 @@ function setup() {
     offline: { botId: "B1", botUserId: "UBOT" },
     onInbound: (inbound) => {
       received.push({ inbound, rowsAtDelivery: db.orm.select().from(inbox).all().length });
+      if (inbound.kind === "view_submitted" && inbound.values.text === "") {
+        return { response_action: "errors", errors: { text: "Campo obbligatorio" } };
+      }
+      return undefined;
     },
   });
   const rows = () => db.orm.select().from(inbox).all();
@@ -35,14 +39,16 @@ async function feed(
   rows: () => unknown[],
 ) {
   let rowsAtAck = -1;
+  let ackedWith: unknown = "nothing";
   await app.processEvent({
     body,
-    ack: async () => {
+    ack: async (response?: unknown) => {
       rowsAtAck = rows().length;
+      ackedWith = response;
     },
     retryNum: 0,
   });
-  return { rowsAtAck };
+  return { rowsAtAck, ackedWith };
 }
 
 describe("Slack app listeners (offline, through Bolt's processEvent)", () => {
@@ -146,6 +152,34 @@ describe("Slack app listeners (offline, through Bolt's processEvent)", () => {
       callbackId: "reply",
       metadata: { renderId: 5 },
       values: { text: "rosso" },
+    });
+    t.db.close();
+  });
+
+  it("a view submission with validation errors is acked with the errors response", async () => {
+    const t = setup();
+    const v = await feed(
+      t.s.app,
+      {
+        type: "view_submission",
+        trigger_id: "T12",
+        team: { id: "T1" },
+        user: { id: OWNER },
+        api_app_id: "A1",
+        view: {
+          id: "V2",
+          type: "modal",
+          callback_id: "reply",
+          private_metadata: "{}",
+          state: { values: { text: { text: { type: "plain_text_input", value: "" } } } },
+        },
+      },
+      t.rows,
+    );
+    expect(v.rowsAtAck).toBe(1);
+    expect(v.ackedWith).toEqual({
+      response_action: "errors",
+      errors: { text: "Campo obbligatorio" },
     });
     t.db.close();
   });
