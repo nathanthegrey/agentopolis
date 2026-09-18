@@ -1,0 +1,83 @@
+# Slack app manifest for Agentopolis (spec section 9). Create the app with
+# api.slack.com/apps → Create New App → From a manifest → paste this YAML.
+display_information:
+  name: Agentopolis
+  description: La tua azienda di agenti
+  background_color: "#1f2933"
+features:
+  app_home:
+    home_tab_enabled: true
+    messages_tab_enabled: false
+    messages_tab_read_only_enabled: true
+  bot_user:
+    display_name: Agentopolis
+    always_online: true
+  slash_commands:
+    - command: /agentopolis
+      description: Apri il pannello dell'azienda
+      should_escape: false
+    - command: /hire
+      description: Assumi un agente
+      should_escape: false
+    - command: /edit
+      description: Modifica un agente (SOUL, JOB, MEMORY)
+      usage_hint: "<agente>"
+      should_escape: false
+    - command: /pause
+      description: Metti in pausa un agente
+      usage_hint: "<agente>"
+      should_escape: false
+    - command: /resume
+      description: Riattiva un agente
+      usage_hint: "<agente>"
+      should_escape: false
+    - command: /model
+      description: Cambia modello a un agente
+      usage_hint: "<agente> <modello>"
+      should_escape: false
+    - command: /budget
+      description: Cambia budget mensile a un agente
+      usage_hint: "<agente> <usd>"
+      should_escape: false
+    - command: /costs
+      description: Costi stimati del mese per agente
+      should_escape: false
+    - command: /status
+      description: Stato del demone e degli agenti
+      should_escape: false
+    - command: /diag
+      description: Ultimo turno di un agente
+      usage_hint: "<agente>"
+      should_escape: false
+    - command: /rollback
+      description: Annulla una delle ultime cinque modifiche
+      should_escape: false
+oauth_config:
+  scopes:
+    bot:
+      - chat:write
+      - chat:write.customize
+      - commands
+      - groups:write
+      - groups:history
+      - groups:read
+      - channels:manage
+      - channels:history
+      - channels:read
+      - reactions:read
+      - users:read
+      - files:write
+settings:
+  event_subscriptions:
+    bot_events:
+      - message.channels
+      - message.groups
+      - reaction_added
+      - app_home_opened
+      - member_joined_channel
+      - channel_archive
+  interactivity:
+    is_enabled: true
+  org_deploy_enabled: false
+  socket_mode_enabled: true
+  token_rotation_enabled: false
