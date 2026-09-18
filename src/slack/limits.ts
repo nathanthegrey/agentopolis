@@ -40,7 +40,8 @@ function cutPoint(text: string, limit: number): number {
  * reopened at the start of the next, so every part renders on its own.
  */
 export function splitText(text: string, max: number = LIMITS.sectionText): string[] {
-  if (max < 8) throw new Error(`splitText: max ${max} is too small`);
+  // below 12 a cut fence cannot be closed, reopened and still make progress
+  if (max < 12) throw new Error(`splitText: max ${max} is too small`);
   const parts: string[] = [];
   let work = text;
   while (work.length > max) {
@@ -48,14 +49,12 @@ export function splitText(text: string, max: number = LIMITS.sectionText): strin
     let inFence = fenceCount(work.slice(0, cut)) % 2 === 1;
     if (inFence) {
       // leave room for the closing marker; the reopened remainder grows by OPEN.length,
-      // so the cut must make net progress or fence handling is skipped for this part
-      const fenced = cutPoint(work, max - CLOSE.length);
-      if (fenced > OPEN.length) {
-        cut = fenced;
-        inFence = fenceCount(work.slice(0, cut)) % 2 === 1;
-      } else {
-        inFence = false;
-      }
+      // so the cut must land past that: a too-early soft cut becomes a hard one
+      const limit = max - CLOSE.length;
+      let fenced = cutPoint(work, limit);
+      if (fenced <= OPEN.length) fenced = outsideBacktickRun(work, limit) || limit;
+      cut = fenced;
+      inFence = fenceCount(work.slice(0, cut)) % 2 === 1;
     }
     if (inFence) {
       parts.push(work.slice(0, cut) + CLOSE);

@@ -36,7 +36,7 @@ describe("splitText", () => {
   it("property: every part fits; backtick-free text concatenates back exactly", () => {
     const plain = fc.string({ maxLength: 12_000 }).filter((s) => !s.includes("`"));
     fc.assert(
-      fc.property(plain, fc.integer({ min: 8, max: 3000 }), (text, max) => {
+      fc.property(plain, fc.integer({ min: 12, max: 3000 }), (text, max) => {
         const parts = splitText(text, max);
         return parts.every((p) => p.length <= max) && parts.join("") === text;
       }),
@@ -54,7 +54,7 @@ describe("splitText", () => {
       // a Slack fence is exactly three backticks; longer runs are not fences and not markdown
       .filter((s) => !s.includes("````"));
     fc.assert(
-      fc.property(withFences, fc.integer({ min: 8, max: 3000 }), (text, max) => {
+      fc.property(withFences, fc.integer({ min: 12, max: 3000 }), (text, max) => {
         const parts = splitText(text, max);
         const balancedInput = fences(text) % 2 === 0;
         return (
