@@ -95,11 +95,37 @@ export function assertUniqueIds(blocks: unknown[]): void {
   }
 }
 
+/**
+ * Slack refuses an empty `value` on a button and on the options of an overflow or select
+ * ("must be more than 0 characters", invalid_arguments). Found live on 2026-09-19.
+ */
+export class EmptyValueError extends Error {}
+export function assertValues(blocks: unknown[]): void {
+  const check = (el: unknown, where: string) => {
+    const e = el as { type?: string; value?: unknown; options?: { value?: unknown }[] } | null;
+    if (!e) return;
+    if (e.type === "button" && (typeof e.value !== "string" || e.value.length === 0)) {
+      throw new EmptyValueError(`button at ${where} has an empty value`);
+    }
+    for (const [i, o] of (e.options ?? []).entries()) {
+      if (typeof o.value !== "string" || o.value.length === 0) {
+        throw new EmptyValueError(`option ${i} of ${e.type} at ${where} has an empty value`);
+      }
+    }
+  };
+  for (const [i, b] of blocks.entries()) {
+    const block = b as { elements?: unknown[]; accessory?: unknown } | null;
+    for (const [j, el] of (block?.elements ?? []).entries()) check(el, `blocks/${i}/elements/${j}`);
+    if (block?.accessory) check(block.accessory, `blocks/${i}/accessory`);
+  }
+}
+
 export function assertBlocks(blocks: unknown[], max: number): void {
   if (blocks.length > max) {
     throw new Error(`${blocks.length} blocks exceed the Slack cap of ${max}`);
   }
   assertUniqueIds(blocks);
+  assertValues(blocks);
 }
 
 export function truncateButton(text: string): string {

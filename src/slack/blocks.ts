@@ -210,7 +210,7 @@ export function homeView(h: HomeInput): unknown {
     blocks.push({
       type: "section",
       text: mrkdwn(p.name),
-      accessory: button(S.home.go, `home_go:${p.slug}`, p.channel),
+      accessory: button(S.home.go, `home_go:${p.slug}`, p.slug),
     });
   }
   const parked: unknown[] = [];
