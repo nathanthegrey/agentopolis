@@ -721,6 +721,11 @@ implementation task, with the answer recorded in this file:
 4. Is a `can_use_tool` request still answerable after a hold of more than 150 s (measured up to
    150 s)? The design does not depend on it (prompts are parked, not held), but the fake CLI's
    fixtures should match reality.
+   **Yes, at 200 s.** One `can_use_tool` request for a writing Bash command was held 200 s,
+   then answered `allow`; the file was written, `permission_denials` was empty, the turn ended
+   `ok` in 207 s [live 2026-09-18, claude 2.1.276]. Note for the fake's fixtures: a read-only
+   command such as `echo` is auto-approved by the CLI and never reaches the control channel;
+   only a writing command produced the request.
 5. Does `--max-budget-usd` stop a turn under a subscription login, given that costs are
    estimates?
    **Yes.** With `--max-budget-usd 0.0001` and `apiKeySource: "none"` in init, a two-tool-call
