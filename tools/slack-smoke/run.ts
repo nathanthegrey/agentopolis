@@ -14,7 +14,7 @@ import { ChatError } from "../../src/ports/chat.js";
 import { SystemClock } from "../../src/ports/clock.js";
 import { createSlackApps } from "../../src/slack/app.js";
 import { answeredCard, askCard, homeView } from "../../src/slack/blocks.js";
-import { ensureChannels } from "../../src/slack/bootstrap.js";
+import { ensureContainers } from "../../src/slack/bootstrap.js";
 import { type Daemon, dispatchCommand, dispatchView } from "../../src/slack/commands.js";
 import type { Inbound } from "../../src/slack/inbox.js";
 import { postAsPersona } from "../../src/slack/persona.js";
@@ -144,12 +144,12 @@ try {
   step("connect", "socket mode connected");
 
   // channels
-  const boot = await ensureChannels(slack.chat, db, clock, snapshot, owner);
+  const boot = await ensureContainers(slack.chat, db, clock, snapshot, owner);
   step(
     "channels",
     `created ${JSON.stringify(boot.created)} adopted ${JSON.stringify(boot.adopted)}`,
   );
-  const ceoChannel = boot.channels.get("ceo") ?? "";
+  const ceoChannel = boot.dms.get("jarvis") ?? "";
   if (!ceoChannel) throw new Error("no #ceo channel to post in");
 
   // persona
