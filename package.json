@@ -12,9 +12,12 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "db:generate": "drizzle-kit generate",
-    "agentopolis": "tsx src/cli/main.ts"
+    "agentopolis": "tsx src/cli/main.ts",
+    "test:live": "AGENTOPOLIS_LIVE=1 vitest run tests/contract",
+    "live:checks": "tsx tools/live-checks/run.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.45.2",
     "yaml": "^2.9.1",

@@ -1,0 +1,18 @@
+[
+  {
+    "emit": {
+      "type": "system",
+      "subtype": "init",
+      "session_id": "$SESSION",
+      "model": "fake",
+      "tools": [],
+      "mcp_servers": [{ "name": "agentopolis", "status": "connected" }],
+      "apiKeySource": "none"
+    }
+  },
+  {
+    "emit": { "type": "assistant", "message": { "content": [{ "type": "text", "text": "ciao" }] } }
+  },
+  { "stderr": "boom" },
+  { "exit": 1 }
+]

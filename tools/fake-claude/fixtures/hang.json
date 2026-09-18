@@ -1,0 +1,15 @@
+[
+  {
+    "emit": {
+      "type": "system",
+      "subtype": "init",
+      "session_id": "$SESSION",
+      "model": "fake",
+      "tools": [],
+      "mcp_servers": [{ "name": "agentopolis", "status": "connected" }],
+      "apiKeySource": "none"
+    }
+  },
+  { "spawn_grandchild": true },
+  { "hang": { "ignore_sigint": true } }
+]

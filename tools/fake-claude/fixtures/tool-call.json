@@ -1,0 +1,22 @@
+[
+  {
+    "emit": {
+      "type": "system",
+      "subtype": "init",
+      "session_id": "$SESSION",
+      "mcp_servers": [{ "name": "agentopolis", "status": "connected" }],
+      "apiKeySource": "none"
+    }
+  },
+  {
+    "tool_call": { "name": "status", "arguments": {} },
+    "then_result": {
+      "session_id": "$SESSION",
+      "total_cost_usd": 0.001,
+      "usage": { "cache_read_input_tokens": 5, "cache_creation_input_tokens": 1 },
+      "modelUsage": { "m": { "costBasis": "list" } },
+      "permission_denials": []
+    }
+  },
+  { "exit": 0 }
+]

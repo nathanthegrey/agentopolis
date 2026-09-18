@@ -1,0 +1,41 @@
+[
+  {
+    "emit": {
+      "type": "rate_limit_event",
+      "rate_limit_info": {
+        "status": "limited",
+        "resetsAt": 1789750800,
+        "unifiedWindows": { "five_hour": { "utilization": 1, "resetsAt": 1789750800 } }
+      }
+    }
+  },
+  {
+    "emit": {
+      "type": "system",
+      "subtype": "init",
+      "session_id": "$SESSION",
+      "model": "fake",
+      "tools": [],
+      "mcp_servers": [{ "name": "agentopolis", "status": "connected" }],
+      "apiKeySource": "none"
+    }
+  },
+  {
+    "emit": {
+      "type": "system",
+      "subtype": "api_retry",
+      "error": "rate_limit",
+      "error_status": 429,
+      "attempt": 1
+    }
+  },
+  {
+    "emit": {
+      "type": "result",
+      "subtype": "error_during_execution",
+      "is_error": true,
+      "session_id": "$SESSION"
+    }
+  },
+  { "exit": 1 }
+]
