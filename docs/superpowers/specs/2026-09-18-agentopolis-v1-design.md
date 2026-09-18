@@ -64,8 +64,9 @@ why this is a recorded road and not a closed door).
 6. **Adding or changing an agent is editing a folder.** No rebuild, no restart. Prose edits reach
    the agent on its next turn because the daemon passes `--system-prompt-snapshot off`
    [verified, section 7]; memory edits reach it through the turn prompt (8).
-7. **The owner's language.** Agents write to the owner in Italian, in one shared style
-   (`STYLE.md`). Files, code, commits and logs are in English.
+7. **The owner's language.** Agents answer the owner in the language the owner writes in,
+   falling back to `config.language` when a message gives no clue (owner, 2026-09-18), in one
+   shared style (`STYLE.md`). Agent ⇄ agent traffic, files, code, commits and logs are in English.
 8. **Token rules, enforced by the daemon:**
    - only the addressee is billed (principle 2);
    - every agent resumes its own CLI session with `--resume`: a resumed turn was measured at
@@ -224,7 +225,8 @@ slack:
   app_token_env: SLACK_APP_TOKEN
   owner_user_id: U0123ABCD
   work_channel_suffix: -work
-language: it
+language: it                            # fallback only: agents answer in the owner's language
+max_open_asks_per_agent: 1
 budgets:
   company_monthly_usd: 300
 approvals:
@@ -284,10 +286,11 @@ never a flag that a crash could leave set.
   the button goes to the member with an open `ask` there; if none, to the container's default
   addressee (the agent of a standing channel, the lead of a task thread); a leading word
   overrides: `lead: …`, `dev: …`, `reviewer: …`, `ceo: …`.
-- **One question at a time, to the owner, per agent.** An agent with an unanswered `ask` to the
-  owner has its further messages to the owner held in the store (not mirrored) until the owner
-  answers or the ask expires. The Home tab shows "N domande in attesa". Messages to other agents
-  are never held.
+- **Open questions to the owner are capped per agent** (`config.max_open_asks_per_agent`,
+  default 1). An agent at the cap has its further messages to the owner held in the store (not
+  mirrored) until the owner answers or an ask expires; its work and its messages to other agents
+  are never held. The Home tab shows "N domande in attesa". Role prose teaches agents to group
+  independent questions into one card and to ask only what blocks.
 - **Mentions are rationed.** `<@owner>` is attached only to `ask`, approval cards and failures,
   never to `say` or `report`; at most one mention per agent per hour, further ones edit the
   existing card. During quiet hours nobody is mentioned; the morning digest opens with "Mentre
