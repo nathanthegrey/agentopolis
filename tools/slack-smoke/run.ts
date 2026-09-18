@@ -1,20 +1,24 @@
 // Live smoke against the owner's Slack workspace, BY HAND on the owner's Mac:
 //   set -a; source ~/.agentopolis.env; set +a
-//   AGENTOPOLIS_LIVE=1 pnpm slack:smoke                     (smoke: persona, ask card, /hire, Home)
+//   AGENTOPOLIS_LIVE=1 pnpm slack:smoke                          (smoke)
 //   AGENTOPOLIS_LIVE=1 AGENTOPOLIS_CHECKS=1,2 pnpm slack:smoke   (adds spec section 18 checks 1–2)
-// Reads SLACK_BOT_TOKEN, SLACK_APP_TOKEN, AGENTOPOLIS_OWNER from the environment; prints none
-// of them. Exit 0 only if the persona post succeeded and the ask card was answered.
-// Standing channels that already exist in the workspace are adopted (conversations.list), so
-// the smoke can run again and again on the same workspace.
+// One Slack app per standing agent: Jarvis (the company app, the ceo) and Ada (lead
+// Agentopolis). Tokens are read from the environment variables named in
+// examples/home/config.yaml (SLACK_BOT_TOKEN/SLACK_APP_TOKEN, SLACK_BOT_TOKEN_ADA/
+// SLACK_APP_TOKEN_ADA) plus AGENTOPOLIS_OWNER; none of them is printed.
+// Steps: archive the old #ceo channel if it still exists; open the DMs and the project
+// channels (adopting agentopolis-work); Jarvis greets in his DM; Ada greets in hers; a
+// "Nina · developer" persona posts in #agentopolis-work through Ada's app; an ask card in the
+// Jarvis DM; /hire; Home. Exit 0 only if Jarvis posted and the ask card was answered.
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initHome } from "../../src/cli/init.js";
-import { ChatError } from "../../src/ports/chat.js";
+import { type AppName, ChatError, COMPANY_APP } from "../../src/ports/chat.js";
 import { SystemClock } from "../../src/ports/clock.js";
-import { createSlackApps } from "../../src/slack/app.js";
+import { type AppTokens, createSlackApps } from "../../src/slack/app.js";
 import { answeredCard, askCard, homeView } from "../../src/slack/blocks.js";
-import { ensureContainers } from "../../src/slack/bootstrap.js";
+import { ceoAgent, ensureContainers } from "../../src/slack/bootstrap.js";
 import { type Daemon, dispatchCommand, dispatchView } from "../../src/slack/commands.js";
 import type { Inbound } from "../../src/slack/inbox.js";
 import { postAsPersona } from "../../src/slack/persona.js";
@@ -25,13 +29,9 @@ if (process.env.AGENTOPOLIS_LIVE !== "1") {
   console.error("refusing to run: set AGENTOPOLIS_LIVE=1 (this talks to the real Slack workspace)");
   process.exit(2);
 }
-const token = process.env.SLACK_BOT_TOKEN ?? "";
-const appToken = process.env.SLACK_APP_TOKEN ?? "";
 const owner = process.env.AGENTOPOLIS_OWNER ?? "";
-if (!token || !appToken || !owner) {
-  console.error(
-    "SLACK_BOT_TOKEN, SLACK_APP_TOKEN and AGENTOPOLIS_OWNER must be set (source ~/.agentopolis.env)",
-  );
+if (!owner) {
+  console.error("AGENTOPOLIS_OWNER must be set (source ~/.agentopolis.env)");
   process.exit(2);
 }
 const CHECKS = new Set(
@@ -47,13 +47,28 @@ const home = initHome(join(work, "home"));
 const db = openDatabase(join(work, "home", "data", "agentopolis.db"));
 const clock = new SystemClock();
 const snapshot = home.snapshot;
+
+// apps: every app named in config.yaml whose tokens are in the environment; company and ada required
+const apps: Record<AppName, AppTokens> = {};
+for (const [name, def] of Object.entries(snapshot.config.slack.apps)) {
+  const token = process.env[def.bot_token_env] ?? "";
+  const appToken = process.env[def.app_token_env] ?? "";
+  if (token && appToken) apps[name] = { token, appToken };
+  else console.log(`  app "${name}": skipped (${def.bot_token_env}/${def.app_token_env} not set)`);
+}
+for (const required of [COMPANY_APP, "ada"]) {
+  if (!apps[required]) {
+    console.error(`app "${required}" is required for the smoke: set its tokens in the environment`);
+    process.exit(2);
+  }
+}
+
 const results: Record<string, string> = {};
 const step = (name: string, outcome: string) => {
   results[name] = outcome;
   console.log(`STEP ${name}: ${outcome}`);
 };
 
-// waiters for the owner's interactions
 const waiters: { match: (i: Inbound) => boolean; resolve: (i: Inbound) => void }[] = [];
 const waitFor = (label: string, match: (i: Inbound) => boolean): Promise<Inbound | undefined> =>
   new Promise((resolve) => {
@@ -115,13 +130,13 @@ const view = () =>
   });
 
 const slack = createSlackApps({
-  apps: { company: { token, appToken } },
+  apps,
   db,
   clock,
   ownerUserId: owner,
   log: (line, extra) => console.log(`  [app] ${line} ${extra ? JSON.stringify(extra) : ""}`),
-  onInbound: async (inbound) => {
-    console.log(`  inbound: ${JSON.stringify(inbound).slice(0, 200)}`);
+  onInbound: async (inbound, ctx) => {
+    console.log(`  inbound via ${ctx.via}: ${JSON.stringify(inbound).slice(0, 200)}`);
     const w = waiters.findIndex((x) => x.match(inbound));
     if (w >= 0) waiters.splice(w, 1)[0]?.resolve(inbound);
     if (inbound.kind === "command")
@@ -131,70 +146,93 @@ const slack = createSlackApps({
     return undefined;
   },
 });
-
-const companyClient = () => {
-  const app = slack.apps.get("company");
-  if (!app) throw new Error("no company app");
-  return app.client;
+const rawClient = (app: AppName) => {
+  const a = slack.apps.get(app);
+  if (!a) throw new Error(`no app ${app}`);
+  return a.client;
 };
 
 let exitCode = 1;
 try {
   await slack.start();
-  step("connect", "socket mode connected");
+  step("connect", `socket mode connected: ${Object.keys(apps).join(", ")}`);
 
-  // channels
+  // the old #ceo channel: archived, never deleted (spec section 9)
+  const oldCeo = (await slack.chat.listPrivateChannels(COMPANY_APP)).find((c) => c.name === "ceo");
+  if (oldCeo) {
+    await slack.chat.archive(oldCeo.id, COMPANY_APP);
+    step("archive-old-ceo", `archived #ceo (${oldCeo.id})`);
+  } else {
+    step("archive-old-ceo", "no #ceo channel to archive");
+  }
+
   const boot = await ensureContainers(slack.chat, db, clock, snapshot, owner);
   step(
-    "channels",
-    `created ${JSON.stringify(boot.created)} adopted ${JSON.stringify(boot.adopted)}`,
+    "containers",
+    `dms ${JSON.stringify([...boot.dms])} created ${JSON.stringify(boot.created)} adopted ${JSON.stringify(boot.adopted)}`,
   );
-  const ceoChannel = boot.dms.get("jarvis") ?? "";
-  if (!ceoChannel) throw new Error("no #ceo channel to post in");
+  const jarvis = ceoAgent(snapshot);
+  const jarvisDm = jarvis ? (boot.dms.get(jarvis.name) ?? "") : "";
+  const adaDm = boot.dms.get("ada") ?? "";
+  const workChannel =
+    boot.channels.get(`agentopolis${snapshot.config.slack.work_channel_suffix}`) ?? "";
+  if (!jarvisDm || !adaDm || !workChannel) throw new Error("missing a DM or the work channel");
 
-  // persona
-  const ada = snapshot.agents.get("ceo");
-  const persona = {
-    username: ada?.display ?? "Ada · CEO",
-    ...(ada?.avatar ? { iconUrl: ada.avatar } : {}),
-  };
-  const hello = await postAsPersona(slack.chat, {
-    channel: ceoChannel,
-    text: "Ciao, sono Ada. Questo è lo smoke test.",
-    persona,
+  const hello = await slack.chat.post({
+    channel: jarvisDm,
+    text: "Ciao, sono Jarvis. Questo è lo smoke test.",
+    as: COMPANY_APP,
   });
-  step("persona", `posted ts=${hello.ts} (guarda: nome e avatar della persona)`);
+  step("jarvis", `posted ts=${hello.ts} in the Jarvis DM (company app, as himself)`);
+  const helloAda = await slack.chat.post({
+    channel: adaDm,
+    text: "Ciao, sono Ada. Questo è lo smoke test.",
+    as: "ada",
+  });
+  step("ada", `posted ts=${helloAda.ts} in the Ada DM (her app, as herself)`);
+  const nina = { username: "Nina · developer", iconEmoji: ":female-technologist:" };
+  const helloNina = await postAsPersona(slack.chat, {
+    channel: workChannel,
+    text: "Ciao, sono Nina, la developer. Posto attraverso l'app di Ada.",
+    persona: nina,
+    as: "ada",
+  });
+  step(
+    "nina",
+    `posted ts=${helloNina.ts} in #agentopolis-work through Ada's app as a persona (guarda: nome e icona)`,
+  );
 
-  // ask card
+  // ask card in the Jarvis DM, company identity
   const card = askCard({
     renderId: 1,
-    persona: persona.username,
+    persona: "Jarvis",
     project: "agentopolis",
     question: "Smoke: quale bottone premi?",
     options: ["Sì", "No"],
   });
   const posted = await slack.chat.post({
-    channel: ceoChannel,
+    channel: jarvisDm,
     text: card.text,
     blocks: card.blocks,
+    as: COMPANY_APP,
   });
-  console.log(`  premi un bottone sulla card entro ${WAIT_MS / 1000} s …`);
+  console.log(`  premi un bottone sulla card nel DM di Jarvis entro ${WAIT_MS / 1000} s …`);
   const click = await waitFor("button", (i) => i.kind === "button" && i.renderId === 1);
   if (click && click.kind === "button") {
     const chosen = click.value.endsWith(":0") ? "Sì" : "No";
     const done = answeredCard(card, { chosen, by: "te", at: clock.now() });
     await slack.chat.update({
-      channel: ceoChannel,
+      channel: jarvisDm,
       ts: posted.ts,
       text: done.text,
       blocks: done.blocks,
+      as: COMPANY_APP,
     });
     step("ask", `answered with ${chosen}; card rewritten`);
   } else {
     step("ask", "NOT answered in time");
   }
 
-  // modal from /hire
   console.log(`  digita /hire nel workspace e invia il modulo entro ${WAIT_MS / 1000} s …`);
   const form = await waitFor(
     "view_submission",
@@ -205,50 +243,54 @@ try {
     form ? `form received: ${JSON.stringify(hired[0] ?? form)}` : "no submission in time",
   );
 
-  // home
-  await slack.chat.publishHome(owner, view());
-  step("home", "published (apri la Home dell'app)");
+  await slack.chat.publishHome(owner, view(), COMPANY_APP);
+  step("home", "published (apri la Home di Jarvis)");
 
-  // spec section 18, checks 1–2
   if (CHECKS.has("1")) {
     const p = await postAsPersona(slack.chat, {
-      channel: ceoChannel,
-      text: "check 1: messaggio persona, prima dell'update",
-      persona,
+      channel: workChannel,
+      text: "check 1: messaggio persona (Nina), prima dell'update",
+      persona: nina,
+      as: "ada",
     });
-    const client = companyClient();
-    const r = (await client.chat.update({
-      channel: ceoChannel,
+    const r = (await rawClient("ada").chat.update({
+      channel: workChannel,
       ts: p.ts,
       text: "check 1: DOPO chat.update",
-    })) as { message?: { username?: string; bot_profile?: unknown; icons?: unknown } };
+    })) as {
+      message?: { username?: string; bot_profile?: unknown; icons?: unknown };
+    };
     console.log(
       `CHECK 1: chat.update response message.username=${JSON.stringify(r.message?.username)} icons=${JSON.stringify(r.message?.icons)} bot_profile=${JSON.stringify(r.message?.bot_profile)}`,
     );
     console.log(
-      "  guarda in Slack: il messaggio 'check 1' mostra ancora nome e avatar di Ada? (atteso: no)",
+      "  guarda in Slack: il messaggio 'check 1' mostra ancora nome e icona di Nina? (atteso: no)",
     );
   }
   if (CHECKS.has("2")) {
-    const parent = await slack.chat.post({ channel: ceoChannel, text: "check 2: thread di prova" });
-    const client = companyClient();
+    const parent = await slack.chat.post({
+      channel: workChannel,
+      text: "check 2: thread di prova",
+      as: COMPANY_APP,
+    });
+    const client = rawClient("ada");
     for (const [what, call] of [
       [
         "setStatus",
         () =>
           client.agents.sessions.setStatus({
-            channel_id: ceoChannel,
+            channel_id: workChannel,
             thread_ts: parent.ts,
             status: "processing",
-            username: persona.username,
-            ...(persona.iconUrl ? { icon_url: persona.iconUrl } : {}),
+            username: nina.username,
+            icon_emoji: nina.iconEmoji,
           } as never),
       ],
       [
         "rename",
         () =>
           client.agents.sessions.rename({
-            channel_id: ceoChannel,
+            channel_id: workChannel,
             thread_ts: parent.ts,
             title: "Smoke check 2",
           } as never),
@@ -267,7 +309,7 @@ try {
   const rows = db.orm.select().from(events).all();
   console.log(`events rows written: ${rows.length}`);
   for (const e of rows) console.log(`  ${e.kind} ${JSON.stringify(e.payload).slice(0, 120)}`);
-  exitCode = results.persona?.startsWith("posted") && results.ask?.startsWith("answered") ? 0 : 1;
+  exitCode = results.jarvis?.startsWith("posted") && results.ask?.startsWith("answered") ? 0 : 1;
 } catch (e) {
   console.error("smoke failed:", e instanceof ChatError ? `${e.code}: ${e.message}` : e);
 } finally {
