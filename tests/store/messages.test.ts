@@ -6,7 +6,7 @@ import { FakeClock } from "../../src/ports/clock.js";
 import { openDatabase } from "../../src/store/db.js";
 import { appendMessage, pendingFor, recordDelivery } from "../../src/store/messages.js";
 import { nextOutbox } from "../../src/store/outbox.js";
-import { containers, events } from "../../src/store/schema.js";
+import { containers, events, messages } from "../../src/store/schema.js";
 
 const fresh = () => openDatabase(join(mkdtempSync(join(tmpdir(), "db-")), "a.db"));
 const standingContainer = (db: ReturnType<typeof fresh>) =>
@@ -84,6 +84,31 @@ describe("messages", () => {
         kind: "say",
       }),
     ).toThrow();
+    expect(db.orm.select().from(events).all()).toHaveLength(0);
+    db.close();
+  });
+
+  it("a throw after a real insert rolls the whole transaction back", () => {
+    const db = fresh();
+    const clock = new FakeClock(1_000);
+    const c = standingContainer(db);
+    expect(() =>
+      db.orm.transaction((tx) => {
+        tx.insert(messages)
+          .values({
+            containerId: c.id,
+            author: "owner",
+            to: "ceo",
+            body: "half-written",
+            kind: "say",
+            createdAt: clock.now(),
+          })
+          .run();
+        tx.insert(events).values({ at: clock.now(), kind: "message.posted", payload: {} }).run();
+        throw new Error("boom");
+      }),
+    ).toThrow(/boom/);
+    expect(db.orm.select().from(messages).all()).toHaveLength(0);
     expect(db.orm.select().from(events).all()).toHaveLength(0);
     db.close();
   });
