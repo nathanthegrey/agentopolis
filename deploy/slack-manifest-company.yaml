@@ -1,16 +1,17 @@
-# Slack app manifest for Agentopolis (spec section 9). Create the app with
-# api.slack.com/apps → Create New App → From a manifest → paste this YAML.
+# The COMPANY app: it is also the ceo's identity (its direct message is the ceo's chat).
+# It owns the slash commands, the Home tab and every app-identity card. One per workspace.
+# Create or update it at api.slack.com/apps → App Manifest → paste → Save → Reinstall.
 display_information:
-  name: Agentopolis
-  description: La tua azienda di agenti
+  name: Jarvis
+  description: "CEO of Agentopolis: talk to him about anything concerning the company"
   background_color: "#1f2933"
 features:
   app_home:
     home_tab_enabled: true
-    messages_tab_enabled: false
-    messages_tab_read_only_enabled: true
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: false
   bot_user:
-    display_name: Agentopolis
+    display_name: Jarvis
     always_online: true
   slash_commands:
     - command: /agentopolis
@@ -39,6 +40,9 @@ oauth_config:
       - channels:manage
       - channels:history
       - channels:read
+      - im:history
+      - im:write
+      - im:read
       - reactions:read
       - users:read
       - files:write
@@ -47,6 +51,7 @@ settings:
     bot_events:
       - message.channels
       - message.groups
+      - message.im
       - reaction_added
       - app_home_opened
       - member_joined_channel

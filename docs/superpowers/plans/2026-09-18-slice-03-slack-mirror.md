@@ -7,7 +7,12 @@ personas, Slack events and button clicks become rows, cards and modals render an
 Home tab shows the company, and none of it needs a public URL.
 
 **Architecture:** a `Chat` port with two implementations, `BoltChat` (Socket Mode) and
-`FakeChat` (records every call). Pure modules build blocks and enforce limits. An **outbox
+`FakeChat` (records every call). **Identity model (owner, 2026-09-19): one Slack app per standing
+agent.** The company app is the ceo (its DM is the ceo chat; it owns commands, Home and every
+app-identity card); each lead is its own app with its own DM. Job agents are personas posted
+through the lead's app. `config.yaml` names the apps under `slack.apps`; `agent.yaml` names its
+app with `slack_app`. The daemon runs one Bolt `App` per configured app; `Chat` gains an
+`as: <appName>` argument on every outbound call, defaulting to `company`. Pure modules build blocks and enforce limits. An **outbox
 pump** drains `outbox` rows through a per-channel 1 msg/s bucket with bounded retries; an
 **inbox** writes every event to `inbox` before processing (ack after durable write, two dedup
 keys). Personas are never edited: anything that changes is app-identity. Slash commands and
@@ -270,8 +275,8 @@ and in a comment at the top of `app.ts`.
 - Test: `tests/slack/bootstrap.test.ts`, `tests/slack/commands.test.ts` (FakeChat)
 
 **Interfaces:**
-- `ensureChannels(chat, db, snapshot, ownerUserId)`: for `#ceo` and each project `#<slug>` and
-  `#<slug><suffix>`: find the container row with that `slack_channel` or create the private
+- `ensureChannels(chat, db, snapshot, ownerUserId)`: for each project `#<slug>-hq` and
+  `#<slug><suffix>` (never the bare slug: Slack refuses a channel named like the workspace): find the container row with that `slack_channel` or create the private
   channel, invite the owner, set the topic, insert the `containers` row (`kind: standing`,
   members `[agent, "owner"]`, `default_to: agent`). Idempotent.
 - `DaemonActions` port (implemented by slice 4; faked here): `hire(form)`, `edit(agent, file,
@@ -303,8 +308,10 @@ and in a comment at the top of `app.ts`.
 
 **Behaviour (guarded by `AGENTOPOLIS_LIVE=1`, reads the two tokens and `AGENTOPOLIS_OWNER`
 from the environment, uses a temporary home from `examples/home`):** connect in Socket Mode;
-`ensureChannels`; post a persona message in `#ceo` ("Ciao, sono Ada"); post an `askCard` with
-two options; wait up to 120 s for the owner to click, then rewrite it as `answeredCard`; open
+`ensureChannels`; the ceo posts in its DM with the owner ("Ciao, sono Jarvis") through the
+company app; the lead posts "Ciao, sono Ada" in its own DM through its app; a persona message
+("Nina · developer") is posted in `#agentopolis-work` through the lead's app; post an `askCard`
+with two options in the ceo DM; wait up to 120 s for the owner to click, then rewrite it as `answeredCard`; open
 nothing (a modal needs a trigger, which comes from the owner: print the instruction "digita
 `/hire` nel workspace" and wait up to 120 s for the `view_submission`, then print the parsed
 form); publish the Home; print every step's result and the `events` rows written. Exit 0 only

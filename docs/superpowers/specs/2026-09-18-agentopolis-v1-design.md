@@ -111,7 +111,7 @@ recorded road and not a closed door).
 
 ```
 ┌──────────────── Slack (one app, Socket Mode) ────────────────┐
-│  #ceo   #agentopolis   #agentopolis-work (threads)   Home tab │
+│  DM ceo · DM lead · #agentopolis-hq · #agentopolis-work · Home │
 └───────────────▲───────────────────────────────┬──────────────┘
                 │ outbox pump (personas)         │ inbox (events, buttons, modals)
 ┌───────────────┴───────────────────────────────▼──────────────┐
@@ -129,7 +129,7 @@ Modules, each one job, each behind a port with a permanent fake (`Store`, `Clock
 
 - **loader**: reads and validates `roles/`, `agents/`, `projects/`, `config.yaml` (zod); watches
   with chokidar (`awaitWriteFinish`, ~300 ms debounce); builds an immutable snapshot and swaps one
-  reference atomically; a malformed file is rejected with a `#ceo` message and the last good
+  reference atomically; a malformed file is rejected with a message in the ceo's direct message and the last good
   snapshot stays; a config file containing a value that looks like a Slack token is rejected.
 - **store**: SQLite through better-sqlite3 + Drizzle; WAL, `synchronous=FULL`, `busy_timeout`;
   the daemon is the only writer; migrations generated and applied at boot in a transaction; boot
@@ -202,12 +202,13 @@ list with `--agents` as JSON. v1 ships `research` (read-only, web fetch and sear
 ### agent.yaml (a standing instance)
 
 ```yaml
-name: agentopolis-lead    # internal id
-display: Leo · lead Agentopolis
+name: ada                 # internal id
+display: Ada · lead Agentopolis
 avatar: https://…/leo.png
 role: lead
 project: agentopolis
 reports_to: ceo
+slack_app: ada            # standing agents name their app; the ceo uses `company`
 model: null               # null = role default
 effort: null
 paused: false
@@ -224,17 +225,18 @@ repo: /home/orch/src/agentopolis
 branches:
   work: dev
   production: master      # merges and pushes here always need the owner's button
-lead: agentopolis-lead
+lead: ada
 ```
 
 ### config.yaml
 
 ```yaml
 slack:
-  bot_token_env: SLACK_BOT_TOKEN        # secrets live in the environment, never in files
-  app_token_env: SLACK_APP_TOKEN
   owner_user_id: U0123ABCD
   work_channel_suffix: -work
+  apps:                                 # one Socket Mode connection each; secrets stay in the environment
+    company: { bot_token_env: SLACK_BOT_TOKEN, app_token_env: SLACK_APP_TOKEN }
+    ada:     { bot_token_env: SLACK_BOT_TOKEN_ADA, app_token_env: SLACK_APP_TOKEN_ADA }
 language: it                            # fallback only: agents answer in the owner's language
 approvals:
   timeout_hours: 24                     # merge_production never expires
@@ -407,28 +409,35 @@ read the same day.
 
 ### Identity
 
-One app, one bot user, Socket Mode (no public URL; one connection). Every agent message is
-posted with `chat.postMessage` and the `username` and `icon_url` overrides, scope
-`chat:write.customize`, degrading to `icon_emoji`, then bare `username`, then plain if a scope
-is missing [field]. Personas are not users: no @mention, no presence. The owner is a real user,
-so `<@owner>` notifies him where section 6 allows it.
+**One Slack app per standing agent** (owner, 2026-09-19, after seeing colleagues as real users in
+other systems). The **company app** is the ceo's identity: its direct message is the owner's
+chat with the ceo, and it owns the slash commands, the Home tab and every app-identity card
+(task cards, approval cards, status lines). Each **lead** is its own app: a real user with its
+own direct message, `@mention`, presence and avatar. Both manifests live in `deploy/`
+(`slack-manifest-company.yaml`, `slack-manifest-agent.yaml`); hiring a standing agent means the
+owner creates its app from the template and puts its two tokens in the environment
+(`SLACK_BOT_TOKEN_<AGENT>`, `SLACK_APP_TOKEN_<AGENT>`), named in `config.yaml` under
+`slack.apps` and referenced by `agent.yaml` as `slack_app`. The daemon runs one Socket Mode
+connection per app. The free plan allows ten apps; v1 uses two.
+
+**Job agents are personas**, not apps: a developer or reviewer posts in its task thread through
+the lead's app with the `username` and `icon_url` overrides (scope `chat:write.customize`,
+degrading to `icon_emoji`, then bare `username`, then plain if a scope is missing [field]).
+Personas cannot be mentioned and have no presence; nobody needs to mention a job agent.
 
 **A persona message is immutable.** `chat.update` documents no identity arguments [verified] and
 no serious implementation edits a persona message [field]. Anything that changes after posting
-(task cards, approval cards, status lines, answered asks) is posted under the app's own identity,
-with the persona named in a `context` line ("Leo chiede"). This also keeps an ask to one push
-notification instead of two.
-
-**One bot per agent is a recorded road, not a closed door.** The largest comparable project made
-one Slack app per agent its headline feature, because personas cannot be mentioned, have no
-presence and cannot hear each other [field]. v1 does not need any of that (agent ⇄ agent traffic
-lives in the store), and the mirror keeps the identity decision in one module so the road stays
-open.
+is posted by the company app under its own identity, with the author named in a `context` line
+("Nina chiede"). A standing agent's own messages (posted by its own app) can be edited by that
+app; the mirror still never edits them, for one rule instead of two.
 
 ### Containers
 
-- `#ceo`: owner ⇄ ceo. Fixed, created at install.
-- `#<project>`: owner ⇄ that project's lead. Decisions, questions, approvals, receipts.
+- **The ceo's direct message** (the company app's Messages tab): owner ⇄ ceo. No `#ceo` channel.
+- **Each lead's direct message**: owner ⇄ that lead, for talking. `#<project>-hq`: owner ⇄ lead
+  for decisions, approvals and receipts, where the owner wants a record beside the work. (The
+  bare `#<project>` is not used: Slack refuses a channel named like the workspace, found live on
+  2026-09-19.)
 - `#<project>-work`: the project's working channel, which the owner is told to mute during
   onboarding (mentions still badge through a mute [documented]). One **thread per task**: the
   parent is the app-identity task card (title, state, cost so far, agents engaged), edited in
@@ -448,8 +457,8 @@ open.
 
 ### Inbox contract
 
-- Events: `message.channels`/`message.groups`, `reaction_added`, `app_home_opened`,
-  `member_joined_channel`, `channel_archive`; interactivity: `block_actions`, `view_submission`,
+- Events, per app: `message.channels`/`message.groups`/`message.im`, `reaction_added`,
+  `app_home_opened` (company app), `member_joined_channel`, `channel_archive`; interactivity: `block_actions`, `view_submission`,
   slash commands.
 - **Ack after durable write.** Every event is written to `inbox` first, then acknowledged
   (within the 3-second window), then processed. A Slack retry is processed as a first delivery
@@ -627,13 +636,13 @@ buttons; stderr goes behind "Dettagli tecnici".
 | wall-clock watchdog fires | SIGINT → grace → SIGKILL group; turn = timed_out; same owner message as a failure |
 | `rate_limit_event` says the subscription window is exhausted, or `api_retry` with `rate_limit`/`overloaded` persists | **limit pause**: no new turns; one owner message, edited in place with each change; turns resume at the event's `resetsAt`; no probe process |
 | Slack unreachable | outbox rows wait with backoff; nothing is dropped; the Home tab shows "Slack non raggiungibile da hh:mm" once it is back |
-| malformed role/agent/project file | rejected with a `#ceo` message naming the file and the error; last valid snapshot stays loaded |
+| malformed role/agent/project file | rejected with a message in the ceo's direct message naming the file and the error; last valid snapshot stays loaded |
 | result without cost | `cost_microusd = null`; shown as "sconosciuto"; never estimated |
 | approval never answered | expires per section 10; card edited |
 | daemon restart | running turns become `interrupted` (never re-run automatically; the agent gets a `system` note that its turn was cut and the channel is the truth); orphan `claude` processes with an `AGENTOPOLIS_TURN_ID` are reaped; pending wakes replay from the store; open cards re-rendered |
 | `--resume` fails ("No conversation found", or no `system/init`) | start a fresh session (first user message = `MEMORY.md` + knowledge + the last 20 messages of its containers from the store), with a `system` note; never loop |
 | agentopolis MCP server `failed`/`needs-auth` at init | turn failed; `pending` is not a failure |
-| cache hit ratio of a resumed turn below 0.7 twice running | `system` message in `#ceo`: something in the prefix is moving |
+| cache hit ratio of a resumed turn below 0.7 twice running | `system` message in the ceo's direct message: something in the prefix is moving |
 
 Process supervision: children spawned `detached` in their own process group and killed as a
 group; stdout drained continuously; `close` not `exit`; two-stage stop; global concurrency cap
@@ -681,7 +690,7 @@ All of these hold on the VPS, with the real CLI and the owner's Slack workspace:
 
 1. `systemctl status agentopolis` is active; a `kill -9` mid-turn followed by a restart loses no
    message, marks the turn interrupted, and re-renders open cards.
-2. The owner writes in `#ceo` and gets an answer from the ceo persona within one turn, in the
+2. The owner writes in the ceo's direct message and gets an answer within one turn, in the
    language he wrote in, delivered from the turn's envelope with no `post` call.
 3. The owner asks the lead in `#agentopolis` for a small change to this repository; a task
    thread appears in `#agentopolis-work`; a developer delivers on a branch; a reviewer reports;
@@ -710,8 +719,11 @@ direct NDJSON peer of the CLI. One package; folders `src/<module>/` mirror secti
 ## 17. Assumptions to confirm with the owner
 
 - The first project is this repository.
-- Standing agents have display names chosen at hire ("Leo · lead Agentopolis"); job agents get a
-  display name from `config.job_names` with their internal id kept.
+- Standing agents' names, chosen by the owner on 2026-09-19: **Jarvis** (ceo), **Ada** (lead
+  Agentopolis), **Penny** (lead Fincanva), **Giano** (lead Ianus). Their Slack apps carry the same
+  names; token env vars are `SLACK_BOT_TOKEN`/`SLACK_APP_TOKEN` for Jarvis (the company app)
+  and `SLACK_BOT_TOKEN_ADA`, `_PENNY`, `_GIANO` for the leads. Job agents get a display name
+  from `config.job_names` with their internal id kept.
 - Slack free plan for now (90-day history is acceptable: the store keeps everything; the agent
   features of section 9 may need a paid plan and are never required).
 
