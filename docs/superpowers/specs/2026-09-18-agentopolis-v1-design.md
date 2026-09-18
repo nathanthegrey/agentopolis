@@ -514,7 +514,8 @@ is never a notification mechanism and never batches other messages.
 `views.publish` on `app_home_opened` and after every daemon action. Shows: month-to-date cost
 "stimato"; "Ti aspettano" (open asks and pending approvals, ≤5 with **Apri**); projects with
 **Vai**; agents as `fields` (≤10 per section) with state glyph and cost, an overflow per agent
-(Pausa / Riattiva / Modello / Licenzia); parked discoveries with **Apri come compito**; actions
+(Pausa / Riattiva / Modello / Ricomincia da capo, which starts a fresh session and keeps
+`MEMORY.md` / Licenzia); parked discoveries with **Apri come compito**; actions
 **Assumi**; "Aggiornato alle hh:mm". At most 100 blocks; beyond that a "…e altri N" line.
 
 ### Files
