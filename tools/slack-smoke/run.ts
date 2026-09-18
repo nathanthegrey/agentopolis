@@ -89,7 +89,6 @@ const actions: DaemonActions = {
   rollback: ok,
   homeView: async () => view(),
   answer: ok,
-  snooze: ok,
   approve: ok,
   deny: ok,
   reply: ok,

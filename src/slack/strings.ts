@@ -4,7 +4,6 @@ import { formatUsd } from "../money.js";
 export const S = {
   asks: (persona: string) => `${persona} chiede`,
   budgetLeft: (micro: number) => `budget ${formatUsd(micro)} $ stimato`,
-  later: "Più tardi",
   confirm: "Conferma",
   choose: "Scegli…",
   chosen: (choice: string, by: string, hhmm: string) =>

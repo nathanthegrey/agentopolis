@@ -49,8 +49,9 @@ describe("askCard", () => {
     const c = askCard({ ...base, options: ["Sì", "No", "Dopo"] });
     expect(c.text).toBe("Procedo?");
     const a = actions(c);
-    expect(a.map((e) => e.action_id)).toEqual(["answer", "answer", "answer", "snooze"]);
-    expect(a.map((e) => e.value)).toEqual(["7:0", "7:1", "7:2", "7"]);
+    expect(a.map((e) => e.action_id)).toEqual(["answer", "answer", "answer"]);
+    expect(a.map((e) => e.value)).toEqual(["7:0", "7:1", "7:2"]);
+    expect(JSON.stringify(c.blocks)).not.toContain("Più tardi");
     expect(a[0]?.text?.text).toBe("Sì");
     const ctx = blocksOf(c).find((b) => b.type === "context");
     expect(JSON.stringify(ctx)).toContain("Ada chiede");
@@ -62,7 +63,7 @@ describe("askCard", () => {
     const a = actions(c);
     expect(a[0]?.type).toBe("static_select");
     expect(a[0]?.options).toHaveLength(4);
-    expect(a.map((e) => e.action_id)).toEqual(["answer_select", "answer_confirm", "snooze"]);
+    expect(a.map((e) => e.action_id)).toEqual(["answer_select", "answer_confirm"]);
   });
   it("truncates long button labels and never exceeds the block cap", () => {
     const c = askCard({ ...base, options: ["x".repeat(200)] });

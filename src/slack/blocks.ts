@@ -52,10 +52,10 @@ export function askCard(a: AskCardInput): Card {
     ...(a.project ? [a.project] : []),
     S.budgetLeft(a.budgetLeftMicro),
   ].join(" · ");
-  const snooze = button(S.later, "snooze", String(a.renderId));
+  // no snooze button and no re-mention: an open ask simply stays open (spec section 9)
   const row =
     a.options.length <= 3
-      ? [...a.options.map((o, i) => button(o, "answer", `${a.renderId}:${i}`)), snooze]
+      ? a.options.map((o, i) => button(o, "answer", `${a.renderId}:${i}`))
       : [
           {
             type: "static_select",
@@ -67,7 +67,6 @@ export function askCard(a: AskCardInput): Card {
             })),
           },
           button(S.confirm, "answer_confirm", String(a.renderId)),
-          snooze,
         ];
   return finish(a.question, [
     ...sections(a.question),

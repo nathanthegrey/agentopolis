@@ -30,7 +30,6 @@ export interface DaemonActions {
   rollback(index: number): Promise<ActionResult>;
   homeView(user: string): Promise<unknown>;
   answer(renderId: number, index: number, user: string): Promise<ActionResult>;
-  snooze(renderId: number): Promise<ActionResult>;
   approve(
     renderId: number,
     epoch: number,
@@ -160,9 +159,6 @@ export async function dispatchButton(
     }
     case "answer_confirm":
       return; // the selection itself is dispatched on answer_select
-    case "snooze":
-      if (!need(b.renderId, "render")) return;
-      return report(await actions.snooze(b.renderId));
     case "approve":
     case "approve_task":
       if (!need(b.renderId, "render") || !need(b.epoch, "epoch")) return;
@@ -177,9 +173,6 @@ export async function dispatchButton(
     case "deny":
       if (!need(b.renderId, "render") || !need(b.epoch, "epoch")) return;
       return report(await actions.deny(b.renderId, b.epoch, b.user));
-    case "reopen":
-      if (!need(b.renderId, "render")) return;
-      return report(await actions.snooze(b.renderId));
     case "details": {
       if (!need(b.renderId, "render")) return;
       const payload = await actions.details(b.renderId);

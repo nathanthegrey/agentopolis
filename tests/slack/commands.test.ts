@@ -37,7 +37,6 @@ function fakeActions(over: Partial<DaemonActions> = {}) {
     rollback: rec("rollback"),
     homeView: async () => ({ type: "home", blocks: [] }),
     answer: rec("answer"),
-    snooze: rec("snooze"),
     approve: rec("approve"),
     deny: rec("deny"),
     reply: rec("reply"),
@@ -132,19 +131,18 @@ describe("dispatchCommand", () => {
 });
 
 describe("dispatchButton", () => {
-  it("routes answer, snooze, approve, approve_task, deny with render id and epoch", async () => {
+  it("routes answer, approve, approve_task, deny with render id and epoch; no snooze exists", async () => {
     const chat = new FakeChat();
     const f = fakeActions();
     await dispatchButton(button("answer", "7:1"), f.actions, chat, ctx);
     await dispatchButton(button("answer_select", "7:2", { selected: "7:2" }), f.actions, chat, ctx);
-    await dispatchButton(button("snooze", "7"), f.actions, chat, ctx);
+    await dispatchButton(button("snooze", "7"), f.actions, chat, ctx); // unknown action: ignored
     await dispatchButton(button("approve", "9:3"), f.actions, chat, ctx);
     await dispatchButton(button("approve_task", "9:3"), f.actions, chat, ctx);
     await dispatchButton(button("deny", "9:3"), f.actions, chat, ctx);
     expect(f.calls).toEqual([
       { name: "answer", args: [7, 1, OWNER] },
       { name: "answer", args: [7, 2, OWNER] },
-      { name: "snooze", args: [7] },
       { name: "approve", args: [9, 3, "once", OWNER] },
       { name: "approve", args: [9, 3, "task", OWNER] },
       { name: "deny", args: [9, 3, OWNER] },
