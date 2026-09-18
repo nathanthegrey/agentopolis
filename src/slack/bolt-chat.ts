@@ -1,7 +1,7 @@
 // Chat over Slack's Web API, one client per configured app (the clients Bolt hands us).
-// `as` picks the app; "company" by default. Personas ride on chat.postMessage's
-// username/icon_url/icon_emoji; chat.update never carries identity fields. Every failure
-// becomes a ChatError with the Slack error code and, when Slack says so, a retry-after.
+// `as` picks the app; "company" by default. Every call goes through one path that applies
+// the per-app method budget (limits.ts) and maps the SDK's errors to ChatError. Personas ride
+// on chat.postMessage's username/icon_url/icon_emoji; chat.update never carries identity.
 import {
   type AppName,
   type Blocks,
@@ -12,6 +12,7 @@ import {
   type PostArgs,
   type Posted,
 } from "../ports/chat.js";
+import { MethodBudget } from "./limits.js";
 
 /** Bounded retries and a per-request timeout: the SDK default retries for ~30 minutes. */
 export const CLIENT_OPTIONS = {
@@ -94,22 +95,20 @@ export function toChatError(e: unknown): ChatError {
   }
 }
 
-async function call<T>(fn: () => Promise<T>): Promise<T> {
-  try {
-    return await fn();
-  } catch (e) {
-    throw toChatError(e);
-  }
-}
-
 export class BoltChat implements Chat {
   readonly #clients: Map<AppName, SlackClient>;
   readonly #botUserIds = new Map<AppName, string>();
+  readonly #budgets = new Map<AppName, MethodBudget>();
 
-  constructor(clients: Map<AppName, SlackClient> | Record<AppName, SlackClient>) {
+  constructor(
+    clients: Map<AppName, SlackClient> | Record<AppName, SlackClient>,
+    opts: { now?: () => number } = {},
+  ) {
     this.#clients = clients instanceof Map ? clients : new Map(Object.entries(clients));
     if (!this.#clients.has(COMPANY_APP))
       throw new ChatError(`no "${COMPANY_APP}" app configured`, "unknown_app");
+    const now = opts.now ?? (() => Date.now());
+    for (const app of this.#clients.keys()) this.#budgets.set(app, new MethodBudget(now));
   }
 
   get apps(): AppName[] {
@@ -122,10 +121,32 @@ export class BoltChat implements Chat {
     return client;
   }
 
+  /** every Web API call goes through here: the per-app method budget, then error mapping */
+  async #call<T>(
+    as: AppName | undefined,
+    method: string,
+    fn: (c: SlackClient) => Promise<T>,
+  ): Promise<T> {
+    const app = as ?? COMPANY_APP;
+    const c = this.#c(app);
+    const decision = this.#budgets.get(app)?.take(method) ?? { ok: true as const };
+    if (!decision.ok) {
+      throw new ChatError(
+        `local budget for ${method} exhausted; retry in ${decision.retryAfterMs} ms`,
+        "ratelimited",
+        decision.retryAfterMs,
+      );
+    }
+    try {
+      return await fn(c);
+    } catch (e) {
+      throw toChatError(e);
+    }
+  }
+
   async post(a: PostArgs): Promise<Posted> {
-    const c = this.#c(a.as);
     const text = a.mention ? `<@${a.mention}> ${a.text}` : a.text;
-    const r = await call(() =>
+    const r = await this.#call(a.as, "chat.postMessage", (c) =>
       c.chat.postMessage({
         channel: a.channel,
         text,
@@ -144,8 +165,7 @@ export class BoltChat implements Chat {
     blocks?: Blocks;
     as?: AppName;
   }): Promise<void> {
-    const c = this.#c(a.as);
-    await call(() =>
+    await this.#call(a.as, "chat.update", (c) =>
       c.chat.update({
         channel: a.channel,
         ts: a.ts,
@@ -156,8 +176,7 @@ export class BoltChat implements Chat {
   }
 
   async delete(a: { channel: string; ts: string; as?: AppName }): Promise<void> {
-    const c = this.#c(a.as);
-    await call(() => c.chat.delete({ channel: a.channel, ts: a.ts }));
+    await this.#call(a.as, "chat.delete", (c) => c.chat.delete({ channel: a.channel, ts: a.ts }));
   }
 
   async postEphemeral(a: {
@@ -167,8 +186,7 @@ export class BoltChat implements Chat {
     blocks?: Blocks;
     as?: AppName;
   }): Promise<void> {
-    const c = this.#c(a.as);
-    await call(() =>
+    await this.#call(a.as, "chat.postEphemeral", (c) =>
       c.chat.postEphemeral({
         channel: a.channel,
         user: a.user,
@@ -179,17 +197,17 @@ export class BoltChat implements Chat {
   }
 
   async createPrivateChannel(name: string, as?: AppName): Promise<{ id: string }> {
-    const c = this.#c(as);
-    const r = await call(() => c.conversations.create({ name, is_private: true }));
+    const r = await this.#call(as, "conversations.create", (c) =>
+      c.conversations.create({ name, is_private: true }),
+    );
     return { id: String((r.channel as { id?: string } | undefined)?.id ?? "") };
   }
 
   async listPrivateChannels(as?: AppName): Promise<{ id: string; name: string }[]> {
-    const c = this.#c(as);
     const out: { id: string; name: string }[] = [];
     let cursor: string | undefined;
     do {
-      const r = await call(() =>
+      const r = await this.#call(as, "conversations.list", (c) =>
         c.conversations.list({
           types: "private_channel",
           exclude_archived: true,
@@ -207,8 +225,9 @@ export class BoltChat implements Chat {
   }
 
   async openDm(userId: string, as?: AppName): Promise<{ id: string }> {
-    const c = this.#c(as);
-    const r = await call(() => c.conversations.open({ users: userId }));
+    const r = await this.#call(as, "conversations.open", (c) =>
+      c.conversations.open({ users: userId }),
+    );
     return { id: String((r.channel as { id?: string } | undefined)?.id ?? "") };
   }
 
@@ -216,8 +235,7 @@ export class BoltChat implements Chat {
     const app = as ?? COMPANY_APP;
     const cached = this.#botUserIds.get(app);
     if (cached) return cached;
-    const c = this.#c(app);
-    const r = await call(() => c.auth.test());
+    const r = await this.#call(app, "auth.test", (c) => c.auth.test());
     const id = String(r.user_id ?? "");
     if (!id) throw new ChatError(`auth.test for "${app}" returned no user_id`, "auth_test");
     this.#botUserIds.set(app, id);
@@ -225,33 +243,31 @@ export class BoltChat implements Chat {
   }
 
   async invite(channel: string, users: string[], as?: AppName): Promise<void> {
-    const c = this.#c(as);
-    await call(() => c.conversations.invite({ channel, users: users.join(",") }));
+    await this.#call(as, "conversations.invite", (c) =>
+      c.conversations.invite({ channel, users: users.join(",") }),
+    );
   }
 
   async archive(channel: string, as?: AppName): Promise<void> {
-    const c = this.#c(as);
-    await call(() => c.conversations.archive({ channel }));
+    await this.#call(as, "conversations.archive", (c) => c.conversations.archive({ channel }));
   }
 
   async setTopic(channel: string, topic: string, as?: AppName): Promise<void> {
-    const c = this.#c(as);
-    await call(() => c.conversations.setTopic({ channel, topic }));
+    await this.#call(as, "conversations.setTopic", (c) =>
+      c.conversations.setTopic({ channel, topic }),
+    );
   }
 
   async openModal(triggerId: string, view: unknown, as?: AppName): Promise<void> {
-    const c = this.#c(as);
-    await call(() => c.views.open({ trigger_id: triggerId, view }));
+    await this.#call(as, "views.open", (c) => c.views.open({ trigger_id: triggerId, view }));
   }
 
   async updateModal(viewId: string, view: unknown, as?: AppName): Promise<void> {
-    const c = this.#c(as);
-    await call(() => c.views.update({ view_id: viewId, view }));
+    await this.#call(as, "views.update", (c) => c.views.update({ view_id: viewId, view }));
   }
 
   async publishHome(user: string, view: unknown, as?: AppName): Promise<void> {
-    const c = this.#c(as);
-    await call(() => c.views.publish({ user_id: user, view }));
+    await this.#call(as, "views.publish", (c) => c.views.publish({ user_id: user, view }));
   }
 
   async setSessionStatus(a: {
@@ -261,18 +277,16 @@ export class BoltChat implements Chat {
     persona?: Persona;
     as?: AppName;
   }): Promise<void> {
-    const c = this.#c(a.as);
-    if (!c.agents)
-      throw new ChatError("agents.sessions is not available in this client", "feature_disabled");
-    const agents = c.agents;
-    await call(() =>
-      agents.sessions.setStatus({
+    await this.#call(a.as, "agents.sessions.setStatus", (c) => {
+      if (!c.agents)
+        throw new ChatError("agents.sessions is not available in this client", "feature_disabled");
+      return c.agents.sessions.setStatus({
         channel_id: a.channel,
         status: a.status,
         ...(a.threadTs ? { thread_ts: a.threadTs } : {}),
         ...identity(a.persona),
-      }),
-    );
+      });
+    });
   }
 
   async renameSession(a: {
@@ -281,17 +295,15 @@ export class BoltChat implements Chat {
     title: string;
     as?: AppName;
   }): Promise<void> {
-    const c = this.#c(a.as);
-    if (!c.agents)
-      throw new ChatError("agents.sessions is not available in this client", "feature_disabled");
-    const agents = c.agents;
-    await call(() =>
-      agents.sessions.rename({
+    await this.#call(a.as, "agents.sessions.rename", (c) => {
+      if (!c.agents)
+        throw new ChatError("agents.sessions is not available in this client", "feature_disabled");
+      return c.agents.sessions.rename({
         channel_id: a.channel,
         title: a.title,
         ...(a.threadTs ? { thread_ts: a.threadTs } : {}),
-      }),
-    );
+      });
+    });
   }
 
   async upload(a: {
@@ -302,8 +314,7 @@ export class BoltChat implements Chat {
     title: string;
     as?: AppName;
   }): Promise<void> {
-    const c = this.#c(a.as);
-    await call(() =>
+    await this.#call(a.as, "files.uploadV2", (c) =>
       c.files.uploadV2({
         channel_id: a.channel,
         ...(a.threadTs ? { thread_ts: a.threadTs } : {}),

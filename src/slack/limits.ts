@@ -132,3 +132,53 @@ export function truncateButton(text: string): string {
   const max = LIMITS.buttonText;
   return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
 }
+
+/** A status line in a task thread is edited at most this often (spec section 9). */
+export const STATUS_LINE_EDIT_MS = 30_000;
+
+/**
+ * Per-method budgets under Slack's tiers, per app (spec section 9 [field]). A family key
+ * ("conversations.*") covers every method of that family. Methods not listed are unbudgeted
+ * here and rely on Slack's own 429 + Retry-After.
+ */
+export const METHOD_BUDGETS_PER_MINUTE: Readonly<Record<string, number>> = {
+  "chat.update": 50,
+  "conversations.*": 40,
+  "chat.appendStream": 160,
+};
+
+export function budgetKeyFor(method: string): string | undefined {
+  if (method in METHOD_BUDGETS_PER_MINUTE) return method;
+  const family = `${method.split(".")[0]}.*`;
+  return family in METHOD_BUDGETS_PER_MINUTE ? family : undefined;
+}
+
+export type BudgetDecision = { ok: true } | { ok: false; retryAfterMs: number };
+
+/** Sliding one-minute window per budget key; `take` counts the call when it is allowed. */
+export class MethodBudget {
+  readonly #now: () => number;
+  readonly #windowMs: number;
+  readonly #calls = new Map<string, number[]>();
+
+  constructor(now: () => number, windowMs = 60_000) {
+    this.#now = now;
+    this.#windowMs = windowMs;
+  }
+
+  take(method: string): BudgetDecision {
+    const key = budgetKeyFor(method);
+    if (!key) return { ok: true };
+    const limit = METHOD_BUDGETS_PER_MINUTE[key] ?? Number.POSITIVE_INFINITY;
+    const now = this.#now();
+    const recent = (this.#calls.get(key) ?? []).filter((t) => now - t < this.#windowMs);
+    if (recent.length >= limit) {
+      const oldest = recent[0] ?? now;
+      this.#calls.set(key, recent);
+      return { ok: false, retryAfterMs: Math.max(1, oldest + this.#windowMs - now) };
+    }
+    recent.push(now);
+    this.#calls.set(key, recent);
+    return { ok: true };
+  }
+}

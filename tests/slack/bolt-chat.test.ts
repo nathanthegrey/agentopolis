@@ -68,10 +68,10 @@ function stubClient(app: string) {
     },
   };
 }
-function stub() {
+function stub(now?: () => number) {
   const company = stubClient("company");
   const ada = stubClient("ada");
-  const chat = new BoltChat({ company: company.client, ada: ada.client });
+  const chat = new BoltChat({ company: company.client, ada: ada.client }, now ? { now } : {});
   return { chat, company, ada };
 }
 
@@ -220,5 +220,29 @@ describe("BoltChat", () => {
       .map((c) => c.args);
     expect(args[0]).toMatchObject({ types: "private_channel", exclude_archived: true, limit: 200 });
     expect(args[1]).toMatchObject({ cursor: "page2" });
+  });
+
+  it("enforces the per-method budget table per app: chat.update 50/min, conversations.* 40/min, with a retry-after", async () => {
+    let t = 1_000_000;
+    const s = stub(() => t);
+    for (let i = 0; i < 50; i += 1)
+      await s.chat.update({ channel: "C1", ts: "1.2", text: `n${i}` });
+    await expect(s.chat.update({ channel: "C1", ts: "1.2", text: "51" })).rejects.toMatchObject({
+      code: "ratelimited",
+    });
+    const err = (await s.chat
+      .update({ channel: "C1", ts: "1.2", text: "51" })
+      .catch((e: ChatError) => e)) as ChatError;
+    expect(err.retryAfterMs ?? 0).toBeGreaterThan(0);
+    expect(err.retryAfterMs ?? 0).toBeLessThanOrEqual(60_000);
+    expect(s.company.calls.filter((c) => c.method === "chat.update")).toHaveLength(50); // nothing sent past the budget
+    await s.chat.update({ channel: "D1", ts: "1.2", text: "ada has her own budget", as: "ada" }); // per app
+    for (let i = 0; i < 38; i += 1) await s.chat.createPrivateChannel(`c${i}`);
+    await s.chat.listPrivateChannels(); // two pages: the 39th and 40th conversations.* calls of the minute
+    await expect(s.chat.archive("C1")).rejects.toMatchObject({ code: "ratelimited" });
+    t += 60_000;
+    await s.chat.update({ channel: "C1", ts: "1.2", text: "a minute later" });
+    await s.chat.archive("C1");
+    await s.chat.post({ channel: "C1", text: "postMessage is not budgeted here" });
   });
 });
