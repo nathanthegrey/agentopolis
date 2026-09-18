@@ -19,9 +19,9 @@ for (const name of TOOL_NAMES) {
     async (input: Record<string, unknown>) => {
       try {
         const result = await callDaemon(socketPath, token, name, input);
-        return { content: [{ type: "text", text: JSON.stringify(result ?? null) }] };
+        return { content: [{ type: "text" as const, text: JSON.stringify(result ?? null) }] };
       } catch (e) {
-        return { content: [{ type: "text", text: (e as Error).message }], isError: true };
+        return { content: [{ type: "text" as const, text: (e as Error).message }], isError: true };
       }
     },
   );
