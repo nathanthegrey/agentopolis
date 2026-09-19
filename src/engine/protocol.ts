@@ -201,6 +201,7 @@ export function outcomeFromResult(
   return {
     status: STATUS[r.subtype] ?? "failed",
     resultText: r.result,
+    structuredOutput: r.structured_output,
     costMicro: r.total_cost_usd === undefined ? null : toMicroUsd(r.total_cost_usd),
     costBasis,
     modelUsage: r.modelUsage ?? null,

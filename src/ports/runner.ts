@@ -20,6 +20,8 @@ export type TurnSpec = {
   maxBudgetMicro: number;
   wallClockMs: number;
   env: Record<string, string>; // AGENTOPOLIS_* for the MCP server, plus spec section 7 env
+  /** flags built per turn and appended last: --agents and --json-schema (spec sections 6, 7) */
+  extraArgs: string[];
   configVersion: string;
 };
 
@@ -53,6 +55,8 @@ export type TurnOutcome = {
   status: TurnStatus;
   sessionId: string;
   resultText: string | undefined;
+  /** the result's structured_output: the envelope, when --json-schema was passed */
+  structuredOutput: unknown;
   costMicro: number | null;
   costBasis: "list" | "managed" | "unknown" | null;
   modelUsage: unknown;
@@ -70,6 +74,8 @@ export type TurnOutcome = {
 
 export interface RunnerEvents {
   onPermission(req: PermissionRequest): Promise<PermissionDecision>;
+  /** the child's pid, recorded on the turn row so a restart can reap it (spec section 13) */
+  onSpawn?(pid: number | undefined): void;
   onRateLimit?(info: RateLimitInfo): void;
   onActivity?(kind: "assistant" | "tool_use" | "tool_result"): void;
 }

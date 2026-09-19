@@ -35,6 +35,32 @@ describe("openDatabase", () => {
     ]);
     db.close();
   });
+  it("carries the job-agent columns of spec section 5 on agents", () => {
+    const file = join(mkdtempSync(join(tmpdir(), "db-")), "a.db");
+    const db = openDatabase(file);
+    const columns = db.sqlite
+      .prepare("select name from pragma_table_info('agents')")
+      .all()
+      .map((r) => (r as { name: string }).name)
+      .sort();
+    expect(columns).toEqual([
+      "display",
+      "kind",
+      "lease_until",
+      "name",
+      "owner_host",
+      "paused",
+      "project",
+      "reports_to",
+      "retired_at",
+      "role",
+      "session_id",
+      "session_started_at",
+      "task_id",
+    ]);
+    db.close();
+  });
+
   it("has a partial outbox index and a descending turns index", () => {
     const file = join(mkdtempSync(join(tmpdir(), "db-")), "a.db");
     const db = openDatabase(file);

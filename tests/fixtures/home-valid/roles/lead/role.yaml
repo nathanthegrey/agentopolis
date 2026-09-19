@@ -5,8 +5,7 @@ model: opus
 effort: high
 disallowed_tools: [Edit, Write, NotebookEdit]
 permissions: { mode: acceptEdits, allow: ["Bash(git *)", "Read"] }
-budget: { monthly_usd: 60, per_turn_usd: 5 }
-max_turns: 60
-max_wall_clock_minutes: 45
+max_minutes: 45
 talks_to: [ceo, owner, developer, reviewer]
 requests: [open_task, close_task, merge_production]
+subagents: [research]

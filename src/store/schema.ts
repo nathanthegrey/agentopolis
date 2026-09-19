@@ -3,9 +3,21 @@ import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqli
 
 export const agents = sqliteTable("agents", {
   name: text("name").primaryKey(),
+  /** the role folder this instance plays; standing rows mirror agent.yaml */
+  role: text("role").notNull().default(""),
+  display: text("display").notNull().default(""),
+  project: text("project"),
+  reportsTo: text("reports_to"),
+  /** standing agents are folders the owner edits; job agents exist only as rows */
+  kind: text("kind", { enum: ["standing", "job"] })
+    .notNull()
+    .default("standing"),
+  /** the task a job agent was born for */
+  taskId: integer("task_id"),
   sessionId: text("session_id"),
   sessionStartedAt: integer("session_started_at"),
   paused: integer("paused", { mode: "boolean" }).notNull().default(false),
+  retiredAt: integer("retired_at"),
   ownerHost: text("owner_host"),
   leaseUntil: integer("lease_until"),
 });
@@ -36,6 +48,10 @@ export const messages = sqliteTable(
     body: text("body").notNull(),
     kind: text("kind", { enum: ["say", "ask", "report", "system"] }).notNull(),
     createdAt: integer("created_at").notNull(),
+    /** the message that answered this ask; "open asks" is a query for asks without one */
+    answeredBy: integer("answered_by"),
+    /** the one test result the daemon can see, on a report from a developer or designer */
+    testsGreen: integer("tests_green", { mode: "boolean" }),
   },
   (t) => [
     index("messages_to_id").on(t.to, t.id),
@@ -95,11 +111,13 @@ export const requests = sqliteTable(
     kind: text("kind").notNull(),
     payload: text("payload", { mode: "json" }).notNull(),
     status: text("status", {
-      enum: ["pending", "approved", "denied", "expired", "done", "snoozed"],
+      enum: ["pending", "approved", "denied", "expired", "done"],
     }).notNull(),
     createdAt: integer("created_at").notNull(),
     decidedBy: text("decided_by"),
     decidedAt: integer("decided_at"),
+    /** the turn whose prompt carried this outcome; null means the agent has not been told */
+    toldAt: integer("told_at"),
     result: text("result", { mode: "json" }),
     epoch: integer("epoch").notNull().default(0),
   },
@@ -118,6 +136,10 @@ export const permissionRequests = sqliteTable("permission_requests", {
   status: text("status", { enum: ["pending", "allowed", "denied", "expired"] }).notNull(),
   createdAt: integer("created_at").notNull(),
   decidedAt: integer("decided_at"),
+  /** the turn whose prompt carried this outcome; null means the agent has not been told */
+  toldAt: integer("told_at"),
+  /** "Approva per questo compito" stores an allow rule scoped to this task (spec section 10) */
+  taskId: integer("task_id"),
 });
 
 export const tasks = sqliteTable("tasks", {
@@ -125,7 +147,12 @@ export const tasks = sqliteTable("tasks", {
   project: text("project").notNull(),
   title: text("title").notNull(),
   lead: text("lead").notNull(),
-  status: text("status", { enum: ["open", "review", "done", "closed"] }).notNull(),
+  status: text("status", {
+    enum: ["open", "review", "done", "closed", "parked", "blocked"],
+  }).notNull(),
+  /** the rung this task's job agent runs on; a change is a new session (A2) */
+  model: text("model"),
+  effort: text("effort"),
   worktree: text("worktree"),
   slackThreadTs: text("slack_thread_ts"),
   openedAt: integer("opened_at").notNull(),

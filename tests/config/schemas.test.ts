@@ -11,9 +11,7 @@ const role = {
   tools: ["agentopolis", "github"],
   disallowed_tools: ["Edit", "Write"],
   permissions: { mode: "acceptEdits", allow: ["Bash(git *)"], deny: [], hooks: [] },
-  budget: { monthly_usd: 60, per_turn_usd: 5 },
-  max_turns: 60,
-  max_wall_clock_minutes: 45,
+  max_minutes: 45,
   talks_to: ["ceo", "owner", "developer"],
   requests: ["open_task", "close_task"],
 };
@@ -23,19 +21,58 @@ describe("RoleFile", () => {
     const r = RoleFile.parse(role);
     expect(r.kind).toBe("standing");
     expect(r.tools).toContain("agentopolis");
+    expect(r.subagents).toEqual([]);
+    expect(r.menu).toBeUndefined();
   });
   it("adds agentopolis to tools when omitted", () => {
     const r = RoleFile.parse({ ...role, tools: ["github"] });
     expect(r.tools).toEqual(["agentopolis", "github"]);
   });
+  it("defaults max_minutes to 45 (spec section 4: the only guard a role configures)", () => {
+    const { max_minutes: _omit, ...withoutGuard } = role;
+    expect(RoleFile.parse(withoutGuard).max_minutes).toBe(45);
+    expect(RoleFile.parse({ ...role, max_minutes: 10 }).max_minutes).toBe(10);
+    expect(RoleFile.safeParse({ ...role, max_minutes: 0 }).success).toBe(false);
+  });
+  it("rejects the budget and turn knobs the spec removed", () => {
+    expect(
+      RoleFile.safeParse({ ...role, budget: { monthly_usd: 60, per_turn_usd: 5 } }).success,
+    ).toBe(false);
+    expect(RoleFile.safeParse({ ...role, max_turns: 60 }).success).toBe(false);
+    expect(RoleFile.safeParse({ ...role, max_wall_clock_minutes: 45 }).success).toBe(false);
+  });
+  it("carries a job role's menu and rejects a value outside low/medium/high", () => {
+    const r = RoleFile.parse({
+      ...role,
+      kind: "job",
+      menu: { models: ["sonnet", "opus"], efforts: ["medium", "high"] },
+    });
+    expect(r.menu).toEqual({ models: ["sonnet", "opus"], efforts: ["medium", "high"] });
+    expect(
+      RoleFile.safeParse({ ...role, menu: { models: ["sonnet"], efforts: ["turbo"] } }).success,
+    ).toBe(false);
+  });
+  it("never accepts xhigh, as an effort or in a menu (owner, 2026-09-19)", () => {
+    expect(RoleFile.safeParse({ ...role, effort: "xhigh" }).success).toBe(false);
+    expect(
+      RoleFile.safeParse({ ...role, menu: { models: ["opus"], efforts: ["high", "xhigh"] } })
+        .success,
+    ).toBe(false);
+  });
+  it("carries the subagent names passed with --agents", () => {
+    expect(RoleFile.parse({ ...role, subagents: ["research"] }).subagents).toEqual(["research"]);
+  });
+  it("accepts only the three v1 request kinds (spec section 8)", () => {
+    expect(
+      RoleFile.parse({ ...role, requests: ["open_task", "close_task", "merge_production"] })
+        .requests,
+    ).toEqual(["open_task", "close_task", "merge_production"]);
+    expect(RoleFile.safeParse({ ...role, requests: ["set_budget"] }).success).toBe(false);
+    expect(RoleFile.safeParse({ ...role, requests: ["hire"] }).success).toBe(false);
+  });
   it("rejects an unknown kind and an unknown key", () => {
     expect(RoleFile.safeParse({ ...role, kind: "daemon" }).success).toBe(false);
     expect(RoleFile.safeParse({ ...role, colour: "red" }).success).toBe(false);
-  });
-  it("rejects a budget that is not positive", () => {
-    expect(
-      RoleFile.safeParse({ ...role, budget: { monthly_usd: 0, per_turn_usd: 5 } }).success,
-    ).toBe(false);
   });
 });
 
@@ -50,12 +87,22 @@ describe("AgentFile", () => {
       reports_to: "ceo",
       model: null,
       effort: null,
-      budget_monthly_usd: null,
       paused: false,
       session_id: null,
       session_started_at: null,
     });
     expect(a.paused).toBe(false);
+  });
+  it("rejects budget_monthly_usd, which the spec removed", () => {
+    expect(
+      AgentFile.safeParse({
+        name: "ada",
+        display: "Ada",
+        role: "lead",
+        reports_to: "jarvis",
+        budget_monthly_usd: 60,
+      }).success,
+    ).toBe(false);
   });
   it("accepts slack_app for a standing agent", () => {
     const a = AgentFile.parse({
@@ -111,9 +158,10 @@ describe("ConfigFile", () => {
       },
     },
     language: "it",
-    budgets: { company_monthly_usd: 300 },
     approvals: { timeout_hours: 24 },
-    daily_digest_at: "08:30",
+    permission_hold_minutes: 5,
+    gated: { models: ["fable"], research: { models: ["opus", "fable"], effort: true } },
+    loop_guard: { messages: 12, review_rejections: 3 },
     job_names: ["Nina", "Marco"],
     max_concurrent_turns: 3,
     mcp_servers: {
@@ -123,8 +171,28 @@ describe("ConfigFile", () => {
   it("accepts the spec example", () => {
     expect(ConfigFile.safeParse(config).success).toBe(true);
   });
-  it("rejects a time that is not HH:MM", () => {
-    expect(ConfigFile.safeParse({ ...config, daily_digest_at: "8h30" }).success).toBe(false);
+  it("rejects the budgets and the digest time the spec removed", () => {
+    expect(ConfigFile.safeParse({ ...config, budgets: { company_monthly_usd: 300 } }).success).toBe(
+      false,
+    );
+    expect(ConfigFile.safeParse({ ...config, daily_digest_at: "08:30" }).success).toBe(false);
+  });
+  it("defaults the hold, the gated values and the loop guard (owner decisions D1, A3, A5)", () => {
+    const { permission_hold_minutes: _h, gated: _g, loop_guard: _l, ...bare } = config;
+    const c = ConfigFile.parse(bare);
+    expect(c.permission_hold_minutes).toBe(5);
+    expect(c.gated).toEqual({
+      models: ["fable"],
+      research: { models: ["opus", "fable"], effort: true },
+    });
+    expect(c.loop_guard).toEqual({ messages: 12, review_rejections: 3 });
+  });
+  it("rejects a hold or a loop-guard count that is not positive", () => {
+    expect(ConfigFile.safeParse({ ...config, permission_hold_minutes: 0 }).success).toBe(false);
+    expect(
+      ConfigFile.safeParse({ ...config, loop_guard: { messages: 0, review_rejections: 3 } })
+        .success,
+    ).toBe(false);
   });
   it("slack.apps must include company; extra apps are fine", () => {
     const { apps } = config.slack;

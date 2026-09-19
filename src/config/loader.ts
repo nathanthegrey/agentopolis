@@ -3,11 +3,25 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { parse as parseYaml } from "yaml";
 import type { z } from "zod";
-import { AgentFile, ConfigFile, ProjectFile, RoleFile } from "./schemas.js";
+import { AgentFile, ConfigFile, ProjectFile, RoleFile, SubagentFrontmatter } from "./schemas.js";
 import { findSecrets } from "./secret-detection.js";
 
 export type LoadError = { file: string; message: string };
-export type Role = RoleFile & { soul: string; job: string; protocol: string };
+/** A Claude Code subagent definition: frontmatter plus the body that is its prompt. */
+export type SubagentDef = {
+  name: string;
+  description: string;
+  prompt: string;
+  tools?: string[] | undefined;
+  model?: string | undefined;
+};
+export type Role = RoleFile & {
+  soul: string;
+  job: string;
+  protocol: string;
+  /** name → definition, read from roles/<role>/subagents/<name>.md */
+  subagentDefs: ReadonlyMap<string, SubagentDef>;
+};
 export type Snapshot = Readonly<{
   dir: string;
   config: ConfigFile;
@@ -20,6 +34,30 @@ export type Snapshot = Readonly<{
 export type LoadResult = { ok: true; snapshot: Snapshot } | { ok: false; errors: LoadError[] };
 
 const ROLE_PROSE = ["SOUL.md", "JOB.md", "PROTOCOL.md"] as const;
+
+const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
+
+/** Parses a subagent .md: YAML frontmatter, then the body that is its prompt [documented]. */
+export function parseSubagent(name: string, text: string): SubagentDef | string {
+  const m = FRONTMATTER.exec(text);
+  if (!m) return "missing --- frontmatter";
+  let front: unknown;
+  try {
+    front = parseYaml(m[1] ?? "");
+  } catch (e) {
+    return `frontmatter yaml: ${(e as Error).message}`;
+  }
+  const parsed = SubagentFrontmatter.safeParse(front);
+  if (!parsed.success) {
+    return parsed.error.issues
+      .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+      .join("; ");
+  }
+  if (parsed.data.name !== name) return `name "${parsed.data.name}" must equal file "${name}"`;
+  const prompt = text.slice(m[0].length).trim();
+  if (prompt === "") return "the body, which is the subagent's prompt, is empty";
+  return { ...parsed.data, prompt };
+}
 
 export function loadHome(dir: string): LoadResult {
   const errors: LoadError[] = [];
@@ -78,15 +116,25 @@ export function loadHome(dir: string): LoadResult {
     const base = join(dir, "roles", name);
     const role = readYaml(join(base, "role.yaml"), RoleFile);
     const [soul, job, protocol] = ROLE_PROSE.map((f) => readText(join(base, f)));
-    if (role && soul !== undefined && job !== undefined && protocol !== undefined) {
-      if (role.name !== name) {
-        errors.push({
-          file: join(base, "role.yaml"),
-          message: `name "${role.name}" must equal folder "${name}"`,
-        });
-      }
-      roles.set(name, { ...role, soul, job, protocol });
+    if (!role || soul === undefined || job === undefined || protocol === undefined) continue;
+    if (role.name !== name) {
+      errors.push({
+        file: join(base, "role.yaml"),
+        message: `name "${role.name}" must equal folder "${name}"`,
+      });
     }
+    // subagents are passed with --agents, so their files are read here: they belong to the
+    // snapshot's version, and an edit to one reaches the next turn like any other prose edit
+    const subagentDefs = new Map<string, SubagentDef>();
+    for (const sub of role.subagents) {
+      const file = join(base, "subagents", `${sub}.md`);
+      const text = readText(file);
+      if (text === undefined) continue;
+      const def = parseSubagent(sub, text);
+      if (typeof def === "string") errors.push({ file, message: def });
+      else subagentDefs.set(sub, def);
+    }
+    roles.set(name, { ...role, soul, job, protocol, subagentDefs });
   }
 
   const agents = new Map<string, AgentFile>();

@@ -21,7 +21,7 @@ describe("buildArgv", () => {
       "--effort",
       "low",
       "--max-turns",
-      "20",
+      "60",
       "--max-budget-usd",
       "1",
       "--permission-mode",

@@ -23,6 +23,8 @@ export type CliRunnerOptions = {
   stopGraceMs?: number;
   /** appended after the built argv; used only by the live checks (e.g. --json-schema) */
   extraArgs?: string[];
+  /** applied after SPAWN_ENV; used only by live check 9, which varies the cache TTL */
+  envOverride?: Record<string, string>;
 };
 
 const STDERR_TAIL = 2_000;
@@ -51,6 +53,7 @@ export class CliRunner implements AgentRunner {
       status: "failed",
       sessionId: spec.sessionId,
       resultText: undefined,
+      structuredOutput: undefined,
       costMicro: null,
       costBasis: null,
       modelUsage: null,
@@ -80,6 +83,7 @@ export class CliRunner implements AgentRunner {
         AGENTOPOLIS_TURN_ID: String(spec.turnId),
         AGENTOPOLIS_AGENT: spec.agent,
         ...spec.env,
+        ...(this.#opts.envOverride ?? {}),
       } as Record<string, string>,
       teeTo: runFile,
       onStderr: (chunk) => {
@@ -89,6 +93,8 @@ export class CliRunner implements AgentRunner {
         queue = queue.then(() => handle(line));
       },
     });
+
+    events.onSpawn?.(child.pid);
 
     const stopWith = (status: TurnStatus, error: string) => {
       if (forcedStatus) return;

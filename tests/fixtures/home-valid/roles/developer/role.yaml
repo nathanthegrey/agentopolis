@@ -4,7 +4,7 @@ kind: job
 model: opus
 disallowed_tools: [WebSearch, WebFetch]
 permissions: { mode: acceptEdits }
-budget: { monthly_usd: 40, per_turn_usd: 5 }
-max_turns: 80
-max_wall_clock_minutes: 45
+max_minutes: 45
 talks_to: [lead, owner, reviewer]
+menu: { models: [sonnet, opus], efforts: [medium, high] }
+subagents: [research]

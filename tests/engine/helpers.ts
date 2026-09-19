@@ -33,10 +33,11 @@ export function makeSpec(overrides: Partial<TurnSpec> = {}): TurnSpec {
     settings: {},
     model: instance.model ?? role.model,
     effort: instance.effort ?? role.effort,
-    maxTurns: role.max_turns,
+    maxTurns: 60, // spec section 7: a fixed daemon constant, not a role knob
     maxBudgetMicro: 1_000_000,
     wallClockMs: 60_000,
     env: {},
+    extraArgs: [],
     configVersion: "v",
     ...overrides,
   };

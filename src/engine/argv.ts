@@ -55,5 +55,6 @@ export function buildArgv(
   argv.push("--append-system-prompt-file", spec.systemPromptFile);
   argv.push("--system-prompt-snapshot", "off", "--exclude-dynamic-system-prompt-sections");
   argv.push("--name", spec.agent);
+  argv.push(...spec.extraArgs);
   return argv;
 }

@@ -4,6 +4,8 @@ slack:
     company: { bot_token_env: xoxb-1-2-3, app_token_env: SLACK_APP_TOKEN }
     ada: { bot_token_env: SLACK_BOT_TOKEN_ADA, app_token_env: SLACK_APP_TOKEN_ADA }
 language: it
-budgets: { company_monthly_usd: 300 }
 approvals: { timeout_hours: 24 }
 max_concurrent_turns: 2
+permission_hold_minutes: 5
+gated: { models: [fable], research: { models: [opus, fable], effort: true } }
+loop_guard: { messages: 12, review_rejections: 3 }
