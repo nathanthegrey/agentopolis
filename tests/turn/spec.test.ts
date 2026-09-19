@@ -184,6 +184,13 @@ describe("buildTurnSpec", () => {
     w.db.close();
   });
 
+  it("caps the effort through the CLI's own settings key, so no xhigh is enforced (8d)", () => {
+    const w = world();
+    const s = buildTurnSpec(w.snapshot, w.db, w.clock, new FakeIds([UUID]), "ada", opts());
+    expect(s.settings.maxEffortLevel).toBe("high");
+    w.db.close();
+  });
+
   it("always loads the agentopolis MCP server", () => {
     const w = world();
     const s = buildTurnSpec(w.snapshot, w.db, w.clock, new FakeIds([UUID]), "ceo", opts());

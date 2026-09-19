@@ -31,7 +31,11 @@ describe("buildSettings", () => {
   it("carries allow/deny and adds the PreToolUse hook only when the role asks for it", () => {
     const base = ceo();
     const plain = buildSettings(base, ["master"], "/h/pre-tool-use.mjs");
-    expect(plain).toEqual({ permissions: { allow: [], deny: [] } });
+    expect(plain).toEqual({
+      permissions: { allow: [], deny: [] },
+      // owner, 2026-09-19: no xhigh anywhere, enforced by the CLI's own settings key (8d)
+      maxEffortLevel: "high",
+    });
     const hooked = buildSettings(
       { ...base, permissions: { ...base.permissions, hooks: ["deny_push_to_production"] } },
       ["master", "main"],

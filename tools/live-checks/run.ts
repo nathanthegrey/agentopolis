@@ -1,6 +1,6 @@
-// Spec section 18, checks 3–6, against the REAL claude CLI. Run by the owner, by hand:
-//   AGENTOPOLIS_LIVE=1 pnpm live:checks                        (all four)
-//   AGENTOPOLIS_LIVE=1 AGENTOPOLIS_CHECKS=4 pnpm live:checks   (one check alone)
+// Spec section 18, checks 3–9, against the REAL claude CLI. Run by the owner, by hand:
+//   AGENTOPOLIS_LIVE=1 pnpm live:checks                            (all of them)
+//   AGENTOPOLIS_LIVE=1 AGENTOPOLIS_CHECKS=7,8,9 pnpm live:checks   (only these)
 // Haiku, --max-budget-usd 0.05 per run, never --bare. Each check prints `CHECK <n>: <answer>`
 // and the path of the raw run file that is its evidence. Nothing here runs under `pnpm test`.
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -19,6 +19,10 @@ import type { ToolHandlers } from "../../src/mcp/tools.js";
 import { SystemClock } from "../../src/ports/clock.js";
 import { SystemIds } from "../../src/ports/ids.js";
 import type { RunnerEvents, TurnOutcome, TurnSpec } from "../../src/ports/runner.js";
+import { ENVELOPE_JSON_SCHEMA, parseEnvelope } from "../../src/turn/envelope.js";
+
+/** Long enough that a cache write is worth measuring (check 9). */
+const LONG_PROMPT = `Sei un agente di prova.\n${"Questa riga esiste solo per riempire il prompt e rendere misurabile una scrittura di cache.\n".repeat(60)}`;
 
 if (process.env.AGENTOPOLIS_LIVE !== "1") {
   console.error(
@@ -28,9 +32,9 @@ if (process.env.AGENTOPOLIS_LIVE !== "1") {
 }
 
 const HOLD_S = Number(process.env.AGENTOPOLIS_CHECK_HOLD_S ?? "200");
-// AGENTOPOLIS_CHECKS=4 (or "3,6") reruns only those checks; unset = all four
+// AGENTOPOLIS_CHECKS=4 (or "7,8,9") reruns only those checks; unset = all of them
 const ONLY = new Set(
-  (process.env.AGENTOPOLIS_CHECKS ?? "3,4,5,6")
+  (process.env.AGENTOPOLIS_CHECKS ?? "3,4,5,6,7,8,9")
     .split(",")
     .map((n) => Number(n.trim()))
     .filter((n) => Number.isInteger(n)),
@@ -78,6 +82,9 @@ function spec(o: {
   systemPrompt: string;
   maxBudgetMicro?: number;
   wallClockMs?: number;
+  model?: string;
+  effort?: string;
+  extraArgs?: string[];
 }): TurnSpec {
   turn += 1;
   const systemPromptFile = join(work, `system-${turn}.md`);
@@ -95,13 +102,13 @@ function spec(o: {
     prompt: o.prompt,
     mcpConfig: JSON.parse(buildMcpConfig(o.role, {}, mcpServerCommand())),
     settings: buildSettings(o.role, undefined, HOOK),
-    model: "haiku",
-    effort: undefined,
+    model: o.model ?? "haiku",
+    effort: o.effort,
     maxTurns: 6,
     maxBudgetMicro: o.maxBudgetMicro ?? BUDGET,
     wallClockMs: o.wallClockMs ?? 180_000,
     env: { AGENTOPOLIS_SOCKET: socketPath, AGENTOPOLIS_TOKEN: "live-token" },
-    extraArgs: [],
+    extraArgs: o.extraArgs ?? [],
     configVersion: home.snapshot.version,
   };
 }
@@ -247,6 +254,133 @@ try {
       b,
     );
     console.log(`  first run evidence: ${a.runFile}`);
+  }
+  // 7. does a tool-heavy turn still return a valid envelope on the first try, and how often
+  //    does the CLI's structured-output retry fire? (spec section 18, pending → slice 4)
+  if (wanted(7)) {
+    const schema = JSON.stringify(ENVELOPE_JSON_SCHEMA);
+    const o = await runner().run(
+      spec({
+        role: bashRole,
+        sessionId: ids.uuid(),
+        resume: false,
+        extraArgs: ["--json-schema", schema],
+        prompt: [
+          "Esegui `echo uno`, poi `echo due`, poi `ls`.",
+          'Poi rispondi con la busta: un solo messaggio, container "dm:ceo", to "owner",',
+          'kind "say", body una riga che dice cosa hai eseguito.',
+        ].join(" "),
+        systemPrompt: "Sei un agente di prova. Usa Bash quando te lo chiedono.",
+        maxBudgetMicro: 200_000,
+      }),
+      allow,
+    );
+    const result = resultLine(o);
+    const parsed = parseEnvelope(o.structuredOutput);
+    const raw = readFileSync(o.runFile, "utf8").split("\n").filter(Boolean);
+    const toolCalls = raw.filter((l) => l.includes('"tool_use"')).length;
+    report(
+      7,
+      `schema ${schema.length} chars; tool_use lines=${toolCalls}; subtype=${String(result?.subtype)}; ` +
+        `envelope ${parsed.ok ? "VALID on the first try" : `INVALID: ${parsed.error}`}; ` +
+        `structured_output=${JSON.stringify(o.structuredOutput)}`,
+      o,
+    );
+  }
+
+  // 8. Fable under the subscription, and the research subagent's model per spawn (A9)
+  if (wanted(8)) {
+    const fable = await runner().run(
+      spec({
+        role: ceo,
+        sessionId: ids.uuid(),
+        resume: false,
+        model: "fable",
+        prompt: "Rispondi con una sola parola: ok.",
+        systemPrompt: "Rispondi con una sola parola.",
+      }),
+      allow,
+    );
+    const init = initLine(fable);
+    report(
+      8,
+      `(a) model in system/init = ${String(init?.model)}, apiKeySource=${String(init?.apiKeySource)}; ` +
+        `(b) cost=${fable.costMicro} micro-USD, costBasis=${fable.costBasis}, ` +
+        `modelUsage=${JSON.stringify(fable.modelUsage)}`,
+      fable,
+    );
+
+    // (c) a --agents JSON naming opus on research, honoured per spawn
+    const agents = JSON.stringify({
+      research: {
+        description: "Read-only research.",
+        prompt: "Answer in one word: pronto.",
+        model: "opus",
+      },
+    });
+    const sub = await runner().run(
+      spec({
+        role: bashRole,
+        sessionId: ids.uuid(),
+        resume: false,
+        extraArgs: ["--agents", agents],
+        prompt: "Usa il subagente research per rispondere in una parola.",
+        systemPrompt: "Delega al subagente research quando te lo chiedono.",
+        maxBudgetMicro: 200_000,
+      }),
+      allow,
+    );
+    report(
+      8,
+      `(c) --agents accepted; modelUsage=${JSON.stringify(sub.modelUsage)} ` +
+        "(look for an opus entry: that is the subagent's own spawn)",
+      sub,
+    );
+    console.log(
+      "  (d) ANSWERED WITHOUT A TURN: `maxEffortLevel` exists in the installed 2.1.277 bundle,\n" +
+        '      described as "Maximum effort level. Anything above it (an /effort or /model pick,\n' +
+        '      --effort, CLAUDE_CODE_EFFORT_LEVEL, a model default) ... Enforced client-side";\n' +
+        '      the daemon now passes maxEffortLevel: "high" in --settings (src/engine/settings.ts).',
+    );
+  }
+
+  // 9. what a 1 h cache write costs against a 5 m one, on the subscription
+  if (wanted(9)) {
+    const twoTurns = async (ttl: string) => {
+      const sessionId = ids.uuid();
+      // SPAWN_ENV pins the TTL at 1h, so the override has to come after it
+      const ttlRunner = () => runner({ envOverride: { CLAUDE_CODE_PROMPT_CACHE_TTL: ttl } });
+      const first = await ttlRunner().run(
+        spec({
+          role: ceo,
+          sessionId,
+          resume: false,
+          prompt: "Rispondi con una sola parola: uno.",
+          systemPrompt: LONG_PROMPT,
+        }),
+        allow,
+      );
+      const second = await ttlRunner().run(
+        spec({
+          role: ceo,
+          sessionId,
+          resume: true,
+          prompt: "Rispondi con una sola parola: due.",
+          systemPrompt: LONG_PROMPT,
+        }),
+        allow,
+      );
+      return { first, second };
+    };
+    const short = await twoTurns("5m");
+    const long = await twoTurns("1h");
+    report(
+      9,
+      `5m: write=${short.first.cacheCreation} read2=${short.second.cacheRead} cost1=${short.first.costMicro} cost2=${short.second.costMicro}; ` +
+        `1h: write=${long.first.cacheCreation} read2=${long.second.cacheRead} cost1=${long.first.costMicro} cost2=${long.second.costMicro}`,
+      long.second,
+    );
+    console.log(`  5m evidence: ${short.first.runFile} and ${short.second.runFile}`);
   }
 } finally {
   await socket.close();

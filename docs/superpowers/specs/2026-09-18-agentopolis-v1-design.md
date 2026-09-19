@@ -796,14 +796,34 @@ recorded here.
    second answer followed the edited prompt; 15,917 tokens read from cache, 4,067 rewritten [live
    2026-09-18, claude 2.1.276, on the Mac; re-check on the VPS's CLI version in slice 7].
 7. Does a tool-heavy turn still return a valid envelope on the first try, and how often does the
-   CLI's structured-output retry fire? [pending, slice 4]
+   CLI's structured-output retry fire? [pending, the owner's by-hand run:
+   `AGENTOPOLIS_LIVE=1 AGENTOPOLIS_CHECKS=7 pnpm live:checks`]
 8. Fable under the subscription: (a) `--model` with Fable starts under the subscription login and
    `system/init` reports it; (b) that turn's `result` cost is priced with Fable's list, so the
    Home tab shows it right; (c) a `--agents` JSON with `model: opus` on `research` is honoured per
-   spawn; (d) does the installed CLI have a settings key that caps effort (`maxEffortLevel` was
-   cited from the 2.1.267 notes)? If so the daemon passes it in `--settings` and "no xhigh" is
-   enforced, not written. [pending, slice 4]
+   spawn. [(a)–(c) pending, the owner's by-hand run: `AGENTOPOLIS_LIVE=1 AGENTOPOLIS_CHECKS=8
+   pnpm live:checks`]
+   (d) **answered: `maxEffortLevel` exists.** The installed 2.1.277 bundle carries the settings
+   key, described as "Maximum effort level. Anything above it (an `/effort` or `/model` pick,
+   `--effort`, `CLAUDE_CODE_EFFORT_LEVEL`, a model default) … across settings files the lowest
+   value wins, and `modelSettings.<model>.maxEffortLevel` replaces it per model. Enforced
+   client-side: an effort supplied through `CLAUDE_CODE_EXTRA_BODY` is not clamped."
+   The daemon therefore passes `maxEffortLevel: "high"` in every turn's `--settings`, so "no
+   xhigh" is enforced rather than written (principle 4) [verified 2026-09-19 against the
+   installed binary, no turn spent].
 9. Cache TTL weight on the subscription: the API prices a 1 h cache write at 2× and a 5 m write
    at 1.25×; run the same two-turn script with `CLAUDE_CODE_PROMPT_CACHE_TTL` at `5m` and at
    `1h` and compare the `result` costs. If 1 h costs twice on write, job agents (bursty) may
-   default to 5 m and standing agents to 1 h. [pending, slice 4]
+   default to 5 m and standing agents to 1 h. [pending, the owner's by-hand run:
+   `AGENTOPOLIS_LIVE=1 AGENTOPOLIS_CHECKS=9 pnpm live:checks`]
+
+10. **The endpoint agent on the owner's Mac kills long argv.** SentinelOne SIGKILLs any
+    `node <script>` spawned with a single argument of roughly 1,000 characters or more: 950
+    characters runs, 1,000 is killed with exit 137 and no output at all [measured 2026-09-19,
+    reproduced from a plain shell with a two-line script, outside this repository]. The CLI is a
+    node program, so this killed every turn the daemon spawned while `--json-schema` carried the
+    full 1,269-character envelope schema. The daemon now passes the schema as structure only
+    (596 characters) with a hard guard at 950, and the field guidance moved into the turn prompt
+    (`src/turn/envelope.ts`, `src/turn/prompt.ts`). **This is a live constraint on the owner's
+    machine, not a design choice**: any future flag whose value approaches 1 kB will be killed
+    the same way, silently. A question for the owner, in the slice 4 report.
