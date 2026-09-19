@@ -5,6 +5,7 @@ import { appendMessage } from "../../src/store/messages.js";
 import { nextOutbox } from "../../src/store/outbox.js";
 import * as schema from "../../src/store/schema.js";
 import {
+  ARGV_SAFE_LIMIT,
   deliverEnvelope,
   ENVELOPE_JSON_SCHEMA,
   Envelope,
@@ -71,6 +72,14 @@ describe("ENVELOPE_JSON_SCHEMA", () => {
 
   it("is JSON, so the CLI can take it on the command line", () => {
     expect(() => JSON.parse(JSON.stringify(ENVELOPE_JSON_SCHEMA))).not.toThrow();
+  });
+
+  it("stays short enough to survive the endpoint agent that kills long argv", () => {
+    const length = JSON.stringify(ENVELOPE_JSON_SCHEMA).length;
+    expect(length).toBeLessThanOrEqual(ARGV_SAFE_LIMIT);
+    // structure only: the guidance lives in the turn prompt, not on the command line
+    expect(JSON.stringify(ENVELOPE_JSON_SCHEMA)).not.toContain("description");
+    expect(JSON.stringify(ENVELOPE_JSON_SCHEMA)).not.toContain("$schema");
   });
 
   it("accepts every fixture the zod schema accepts", () => {
