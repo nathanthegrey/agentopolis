@@ -3,9 +3,21 @@ import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqli
 
 export const agents = sqliteTable("agents", {
   name: text("name").primaryKey(),
+  /** the role folder this instance plays; standing rows mirror agent.yaml */
+  role: text("role").notNull().default(""),
+  display: text("display").notNull().default(""),
+  project: text("project"),
+  reportsTo: text("reports_to"),
+  /** standing agents are folders the owner edits; job agents exist only as rows */
+  kind: text("kind", { enum: ["standing", "job"] })
+    .notNull()
+    .default("standing"),
+  /** the task a job agent was born for */
+  taskId: integer("task_id"),
   sessionId: text("session_id"),
   sessionStartedAt: integer("session_started_at"),
   paused: integer("paused", { mode: "boolean" }).notNull().default(false),
+  retiredAt: integer("retired_at"),
   ownerHost: text("owner_host"),
   leaseUntil: integer("lease_until"),
 });
@@ -95,7 +107,7 @@ export const requests = sqliteTable(
     kind: text("kind").notNull(),
     payload: text("payload", { mode: "json" }).notNull(),
     status: text("status", {
-      enum: ["pending", "approved", "denied", "expired", "done", "snoozed"],
+      enum: ["pending", "approved", "denied", "expired", "done"],
     }).notNull(),
     createdAt: integer("created_at").notNull(),
     decidedBy: text("decided_by"),
@@ -125,7 +137,9 @@ export const tasks = sqliteTable("tasks", {
   project: text("project").notNull(),
   title: text("title").notNull(),
   lead: text("lead").notNull(),
-  status: text("status", { enum: ["open", "review", "done", "closed"] }).notNull(),
+  status: text("status", {
+    enum: ["open", "review", "done", "closed", "parked", "blocked"],
+  }).notNull(),
   worktree: text("worktree"),
   slackThreadTs: text("slack_thread_ts"),
   openedAt: integer("opened_at").notNull(),

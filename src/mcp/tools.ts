@@ -23,7 +23,7 @@ export const TOOL_SHAPES = {
   },
   request: {
     description:
-      "Ask the daemon to act: open_task, close_task, hire, retire, pause, set_budget, merge_production, run_schedule. Your role lists which you may use.",
+      "Ask the daemon to act: open_task, close_task, merge_production. Your role lists which you may use.",
     input: { kind: z.string().min(1), payload: z.record(z.string(), z.unknown()).default({}) },
   },
   remember: {

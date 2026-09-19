@@ -1,29 +1,24 @@
 import { z } from "zod";
 
 const slug = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "lowercase slug");
-const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "HH:MM");
 const positive = z.number().positive();
+const positiveInt = z.number().int().positive();
 
 export const RoleKind = z.enum(["standing", "job"]);
 export const PermissionMode = z.enum(["default", "acceptEdits", "plan", "auto", "dontAsk"]);
+/** The CLI's levels. `xhigh` is never configured here (owner, 2026-09-19): see ConfiguredEffort. */
 export const Effort = z.enum(["low", "medium", "high", "xhigh", "max"]);
-export const RequestKind = z.enum([
-  "open_task",
-  "close_task",
-  "hire",
-  "retire",
-  "pause",
-  "set_budget",
-  "merge_production",
-  "run_schedule",
-]);
+/** What a role or a menu may name: the owner ruled out xhigh everywhere. */
+export const ConfiguredEffort = z.enum(["low", "medium", "high"]);
+/** The three kinds an agent may request in v1 (spec section 8); the rest are owner actions. */
+export const RequestKind = z.enum(["open_task", "close_task", "merge_production"]);
 
 export const RoleFile = z.strictObject({
   name: slug,
   description: z.string().min(1),
   kind: RoleKind,
   model: z.string().min(1),
-  effort: Effort.optional(),
+  effort: ConfiguredEffort.optional(),
   tools: z
     .array(z.string().min(1))
     .default([])
@@ -35,9 +30,17 @@ export const RoleFile = z.strictObject({
     deny: z.array(z.string()).default([]),
     hooks: z.array(z.string()).default([]),
   }),
-  budget: z.strictObject({ monthly_usd: positive, per_turn_usd: positive }),
-  max_turns: z.number().int().positive(),
-  max_wall_clock_minutes: z.number().int().positive(),
+  /** Job roles only: what the lead may pick at open_task; the daemon refuses the rest. */
+  menu: z
+    .strictObject({
+      models: z.array(z.string().min(1)).min(1),
+      efforts: z.array(ConfiguredEffort).min(1),
+    })
+    .optional(),
+  /** Names under roles/<role>/subagents/*.md, passed to the CLI with --agents. */
+  subagents: z.array(slug).default([]),
+  /** The wall-clock watchdog: the one guard a role configures (spec section 4). */
+  max_minutes: positiveInt.default(45),
   talks_to: z.array(z.string().min(1)).min(1),
   requests: z.array(RequestKind).default([]),
 });
@@ -53,8 +56,7 @@ export const AgentFile = z.strictObject({
   /** standing agents name their Slack app (a key of config.slack.apps); the ceo uses "company" */
   slack_app: slug.optional(),
   model: z.string().min(1).nullable().default(null),
-  effort: Effort.nullable().default(null),
-  budget_monthly_usd: positive.nullable().default(null),
+  effort: ConfiguredEffort.nullable().default(null),
   paused: z.boolean().default(false),
   session_id: z.uuid().nullable().default(null),
   session_started_at: z.number().int().nullable().default(null),
@@ -94,12 +96,31 @@ export const ConfigFile = z.strictObject({
       .refine((apps) => "company" in apps, { message: 'slack.apps must include "company"' }),
   }),
   language: z.enum(["it", "en"]).default("it"),
-  budgets: z.strictObject({ company_monthly_usd: positive }),
   approvals: z.strictObject({ timeout_hours: positive }),
-  daily_digest_at: hhmm.optional(),
+  /** Hold a parked can_use_tool open this long with its card already up, then park it (D1). */
+  permission_hold_minutes: positive.default(5),
+  /** Values an agent may not be spawned with until the owner presses Approva (A3). */
+  gated: z
+    .strictObject({
+      models: z.array(z.string().min(1)).default(["fable"]),
+      research: z
+        .strictObject({
+          models: z.array(z.string().min(1)).default(["opus", "fable"]),
+          effort: z.boolean().default(true),
+        })
+        .prefault({}),
+    })
+    .prefault({}),
+  /** What bounds an agent ⇄ agent exchange inside one task (A5). */
+  loop_guard: z
+    .strictObject({
+      messages: positiveInt.default(12),
+      review_rejections: positiveInt.default(3),
+    })
+    .prefault({}),
   /** display names for job agents, round robin (spec section 4) */
   job_names: z.array(z.string().min(1)).default([]),
-  max_concurrent_turns: z.number().int().positive().default(3),
+  max_concurrent_turns: positiveInt.default(3),
   mcp_servers: z.record(z.string(), McpServerDef).default({}),
 });
 export type ConfigFile = z.infer<typeof ConfigFile>;

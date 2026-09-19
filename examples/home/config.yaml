@@ -5,10 +5,12 @@ slack:
     company: { bot_token_env: SLACK_BOT_TOKEN, app_token_env: SLACK_APP_TOKEN }
     ada: { bot_token_env: SLACK_BOT_TOKEN_ADA, app_token_env: SLACK_APP_TOKEN_ADA }
 language: it
-budgets:
-  company_monthly_usd: 300
 approvals:
   timeout_hours: 24                     # merge_production never expires
-daily_digest_at: "08:30"                # sent only if something happened
 max_concurrent_turns: 3
 job_names: [Nina, Marco, Sara, Luca, Elena, Paolo]   # display names for job agents, round robin
+permission_hold_minutes: 5              # hold a permission this long with the card up, then park it
+gated:                                  # values that need the owner's Approva (spec section 10)
+  models: [fable]
+  research: { models: [opus, fable], effort: true }
+loop_guard: { messages: 12, review_rejections: 3 }   # per task, see spec section 6
