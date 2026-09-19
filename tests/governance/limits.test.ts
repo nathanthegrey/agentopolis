@@ -97,7 +97,9 @@ describe("limit pause (spec section 13)", () => {
     expect(w.limits.pausedUntil).toBe(resetsAt);
     expect(outboxKinds(w)).toEqual(["card.post"]);
     const posted = w.db.orm.select().from(schema.outbox).all()[0];
-    expect((posted?.payload as { text: string }).text).toMatch(/Limite del piano raggiunto/);
+    expect((posted?.payload as { text: string } | undefined)?.text).toMatch(
+      /Limite del piano raggiunto/,
+    );
     w.db.close();
   });
 
