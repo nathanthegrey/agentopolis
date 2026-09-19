@@ -53,6 +53,11 @@ export type Daemon = {
   scheduler: Scheduler;
   chat: Chat;
   health(): HealthReport;
+  /**
+   * What an owner message from Slack does, without Slack: the seam --fake needs, and the one
+   * the end-to-end test drives. Routing is the real routing (spec section 6).
+   */
+  ownerSays(channel: string, text: string): void;
   stop(drainMs?: number): Promise<void>;
 };
 
@@ -242,6 +247,15 @@ export async function startDaemon(o: DaemonOptions): Promise<Daemon> {
     scheduler,
     chat: realChat,
     health,
+    ownerSays: (channel, text) =>
+      ownerSaid(db, clock, holder, scheduler, {
+        kind: "owner_message",
+        channel,
+        text,
+        ts: String(clock.now()),
+        threadTs: undefined,
+        user: holder.current.config.slack.owner_user_id,
+      } as Extract<Inbound, { kind: "owner_message" }>),
     async stop(drainMs = DRAIN_MS) {
       await watcher?.close();
       await slack?.stop();
