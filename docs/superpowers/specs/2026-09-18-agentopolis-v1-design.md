@@ -157,12 +157,19 @@ Modules, each one job, each behind a port with a permanent fake (`Store`, `Clock
 ~/agentopolis/                      a folder the owner may keep under git by hand; the daemon never runs git here
   config.yaml
   STYLE.md         shared voice for every agent: tu form, decision first, ≤5 lines, terms defined
+  knowledge/       company facts every agent reads on session start (owner, 2026-09-19): who the
+                   owner is and how he works, the map of products and how they relate, the house
+                   rules (production only with the owner's button, secrets by his hand, work vs
+                   production branches), machines and tools, the priorities of the moment. One or
+                   two pages: every agent pays it once per session. Not a product's details
+                   (project knowledge), not an agent's recollections (MEMORY.md), not the tone (STYLE.md).
   roles/<role>/
     role.yaml
     AGENT.md       who it is, what it does, how it works with others, what it never does
   agents/<name>/                     standing agents only (the owner edits these)
     agent.yaml
     MEMORY.md      curated long-term memory, written by the agent through the daemon
+    AGENT.md       optional: personal instructions or character, appended after the role's AGENT.md
   projects/<slug>/
     project.yaml
     knowledge/     any text the project's agents should read on session start
@@ -355,7 +362,7 @@ claude -p --output-format stream-json --input-format stream-json --verbose
   --settings '<json: permissions.allow/deny + PreToolUse hooks for this role>'
   --mcp-config <byte-stable json: agentopolis (alwaysLoad) + role tools> --strict-mcp-config
   --agents '<json: the role's subagents>'
-  --append-system-prompt-file <STYLE.md + AGENT.md, in that order>
+  --append-system-prompt-file <STYLE.md + roles/<role>/AGENT.md + agents/<name>/AGENT.md if present, in that order>
   --system-prompt-snapshot off
   --exclude-dynamic-system-prompt-sections
   --json-schema '<the envelope schema of section 6>'
@@ -380,8 +387,8 @@ Rules:
   prompt still hits the cache; an edited one costs one uncached turn and applies [live
   2026-09-18: the second answer followed the edited prompt; 15,917 tokens read from cache,
   4,067 rewritten].
-- The first user message of a session (never the system prompt) carries `MEMORY.md` and the
-  project's `knowledge/`.
+- The first user message of a session (never the system prompt) carries, in this order, the
+  agent's `MEMORY.md`, the company `knowledge/`, and the project's `knowledge/`.
 - The turn's user message is the first stdin line; stdin stays open until the `result` line
   because permission answers travel on it [measured].
 - The runner parses the stream: `rate_limit_event` (utilization and reset per window, emitted
