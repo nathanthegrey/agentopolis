@@ -78,6 +78,7 @@ async function scenario() {
       AGENTOPOLIS_TOKEN: "contract-token",
       ...(LIVE ? {} : { FAKE_CLAUDE_DIR: FIXTURES, FAKE_CLAUDE_FIXTURE: "contract-happy" }),
     },
+    extraArgs: [],
     configVersion: home.snapshot.version,
   });
   return { runner, spec, socket, work };

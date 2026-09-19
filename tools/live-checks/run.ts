@@ -101,6 +101,7 @@ function spec(o: {
     maxBudgetMicro: o.maxBudgetMicro ?? BUDGET,
     wallClockMs: o.wallClockMs ?? 180_000,
     env: { AGENTOPOLIS_SOCKET: socketPath, AGENTOPOLIS_TOKEN: "live-token" },
+    extraArgs: [],
     configVersion: home.snapshot.version,
   };
 }

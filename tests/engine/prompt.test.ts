@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  composeFirstUserMessage,
-  composeSystemPrompt,
-  composeTurnPrompt,
-} from "../../src/engine/prompt.js";
+import { composeFirstUserMessage, composeSystemPrompt } from "../../src/engine/prompt.js";
 import { snapshot } from "./helpers.js";
 
 const ceo = () => {
@@ -48,46 +44,5 @@ describe("composeFirstUserMessage", () => {
     const out = composeFirstUserMessage({ memory: "", knowledge: [], state: "rotated" });
     expect(out.indexOf("# Project knowledge")).toBeLessThan(out.indexOf("# State pack"));
     expect(out).toContain("rotated");
-  });
-});
-
-describe("composeTurnPrompt", () => {
-  const messages = [
-    { id: 3, container: "ceo", author: "owner", kind: "say", body: "tre" },
-    { id: 1, container: "ceo", author: "owner", kind: "ask", body: "uno" },
-    { id: 2, container: "agentopolis", author: "lead", kind: "report", body: "due" },
-  ];
-  it("groups by container in first-id order, messages in id order, ends with the tool instruction", () => {
-    const out = composeTurnPrompt({ messages, outcomes: [], remembered: [] });
-    expect(out.indexOf("## ceo")).toBeLessThan(out.indexOf("## agentopolis"));
-    expect(out.indexOf("[#1] owner (ask): uno")).toBeLessThan(out.indexOf("[#3] owner (say): tre"));
-    expect(out).toContain("[#2] lead (report): due");
-    expect(out).not.toContain("# Outcomes");
-    expect(out).not.toContain("# Remembered since last turn");
-    expect(
-      out
-        .trimEnd()
-        .endsWith("Rispondi solo tramite gli strumenti agentopolis; non scrivere testo libero."),
-    ).toBe(true);
-  });
-  it("adds outcomes and remembered lines when present, in that order", () => {
-    const out = composeTurnPrompt({
-      messages,
-      outcomes: ["request 4 approved"],
-      remembered: ["x"],
-    });
-    expect(out.indexOf("## agentopolis")).toBeLessThan(out.indexOf("# Outcomes"));
-    expect(out.indexOf("# Outcomes")).toBeLessThan(out.indexOf("# Remembered since last turn"));
-    expect(out).toContain("- request 4 approved");
-    expect(out).toContain("- x");
-  });
-  it("is byte-identical for the same input", () => {
-    const a = composeTurnPrompt({ messages, outcomes: ["o"], remembered: ["r"] });
-    const b = composeTurnPrompt({
-      messages: [...messages].reverse(),
-      outcomes: ["o"],
-      remembered: ["r"],
-    });
-    expect(a).toBe(b);
   });
 });

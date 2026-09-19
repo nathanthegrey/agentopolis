@@ -37,6 +37,7 @@ export function makeSpec(overrides: Partial<TurnSpec> = {}): TurnSpec {
     maxBudgetMicro: 1_000_000,
     wallClockMs: 60_000,
     env: {},
+    extraArgs: [],
     configVersion: "v",
     ...overrides,
   };

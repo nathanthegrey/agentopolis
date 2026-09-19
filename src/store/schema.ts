@@ -144,6 +144,9 @@ export const tasks = sqliteTable("tasks", {
   status: text("status", {
     enum: ["open", "review", "done", "closed", "parked", "blocked"],
   }).notNull(),
+  /** the rung this task's job agent runs on; a change is a new session (A2) */
+  model: text("model"),
+  effort: text("effort"),
   worktree: text("worktree"),
   slackThreadTs: text("slack_thread_ts"),
   openedAt: integer("opened_at").notNull(),

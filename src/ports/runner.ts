@@ -20,6 +20,8 @@ export type TurnSpec = {
   maxBudgetMicro: number;
   wallClockMs: number;
   env: Record<string, string>; // AGENTOPOLIS_* for the MCP server, plus spec section 7 env
+  /** flags built per turn and appended last: --agents and --json-schema (spec sections 6, 7) */
+  extraArgs: string[];
   configVersion: string;
 };
 

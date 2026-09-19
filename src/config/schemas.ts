@@ -77,6 +77,15 @@ export const ProjectFile = z
   });
 export type ProjectFile = z.infer<typeof ProjectFile>;
 
+/** Frontmatter of roles/<role>/subagents/<name>.md, as Claude Code defines it [documented]. */
+export const SubagentFrontmatter = z.strictObject({
+  name: slug,
+  description: z.string().min(1),
+  tools: z.array(z.string().min(1)).optional(),
+  model: z.string().min(1).optional(),
+});
+export type SubagentFrontmatter = z.infer<typeof SubagentFrontmatter>;
+
 export const McpServerDef = z.strictObject({
   command: z.string().min(1),
   args: z.array(z.string()).default([]),
