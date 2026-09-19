@@ -3,9 +3,12 @@
 import { and, desc, eq, gt } from "drizzle-orm";
 import type { SnapshotHolder } from "../config/holder.js";
 import type { Clock } from "../ports/clock.js";
+import type { RateLimitInfo } from "../ports/runner.js";
+import type { Card } from "../slack/blocks.js";
 import type { Db } from "../store/db.js";
 import { appendEvent } from "../store/events.js";
 import * as schema from "../store/schema.js";
+import { postCard, updateCard } from "./cards.js";
 
 /** Neither the owner nor the daemon counts towards an agent-to-agent loop. */
 const NOT_AN_AGENT = new Set(["owner", "daemon"]);
@@ -266,5 +269,237 @@ export class Guards {
         payload: { taskId, model, effort },
       });
     });
+  }
+}
+
+// ---- the plan's own limit (A8 and spec section 13) --------------------------------------------
+// There is no paid overflow, ever (owner, 2026-09-19: "free or nothing"): the company stops at
+// the limit and starts again at resetsAt. State lives in events, so a restart derives it.
+
+const FIFTEEN_MINUTES = 15 * 60_000;
+/** the utilization at which the daemon stops filling every slot */
+export const BACKOFF_AT = 0.9;
+
+export type PlanLimitsDeps = {
+  db: Db;
+  clock: Clock;
+  holder: SnapshotHolder;
+  /** the ceo's direct message: where the one limit notice lives */
+  ownerChannel(): string;
+  onConcurrencyChange(n: number): void;
+  log?(line: string, fields?: Record<string, unknown>): void;
+};
+
+const hhmm = (at: number): string =>
+  new Date(at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+
+const limitCard = (until: number): Card => ({
+  text: `Limite del piano raggiunto: riparto alle ${hhmm(until)}.`,
+  blocks: [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `⏸️ Limite del piano raggiunto: riparto alle *${hhmm(until)}*.`,
+      },
+    },
+  ],
+});
+
+type PauseState = { until: number; outboxId: number | null } | undefined;
+
+export class PlanLimits {
+  readonly #deps: PlanLimitsDeps;
+
+  constructor(deps: PlanLimitsDeps) {
+    this.#deps = deps;
+  }
+
+  /** Derived from events, so a restart restores it (spec section 13). */
+  #pause(): PauseState {
+    const rows = this.#deps.db.orm
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.kind, "limit.pause"))
+      .all();
+    const last = rows.at(-1);
+    if (!last) return undefined;
+    const resumed = this.#deps.db.orm
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.kind, "limit.resume"))
+      .all()
+      .some((e) => e.at >= last.at);
+    if (resumed) return undefined;
+    const payload = last.payload as { until: number; outboxId: number | null };
+    return { until: payload.until, outboxId: payload.outboxId ?? null };
+  }
+
+  get pausedUntil(): number | null {
+    const pause = this.#pause();
+    if (!pause) return null;
+    if (this.#deps.clock.now() >= pause.until) {
+      this.resume();
+      return null;
+    }
+    return pause.until;
+  }
+
+  /** No turn starts while the plan's window is exhausted. */
+  mayRun(): boolean {
+    return this.pausedUntil === null;
+  }
+
+  onRateLimit(info: RateLimitInfo): void {
+    const worst = Math.max(0, ...Object.values(info.windows).map((w) => w.utilization));
+    const exhausted = info.status !== "allowed" && info.status !== "allowed_warning";
+    if (exhausted) {
+      this.pause(info.resetsAt ?? this.#deps.clock.now() + FIFTEEN_MINUTES);
+      return;
+    }
+    if (info.status === "allowed_warning" || worst >= BACKOFF_AT) {
+      this.#backoff(info.resetsAt ?? null);
+      return;
+    }
+    this.#clearBackoff();
+  }
+
+  /** Two api_retry events running with rate_limit or overloaded is the same pause. */
+  onApiRetry(kind: string): void {
+    const { db, clock } = this.#deps;
+    if (kind !== "rate_limit" && kind !== "overloaded") return;
+    db.orm.transaction((tx) => {
+      appendEvent(tx, { at: clock.now(), kind: "limit.api_retry", payload: { kind } });
+    });
+    const recent = db.orm
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.kind, "limit.api_retry"))
+      .all();
+    const lastResume = db.orm
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.kind, "limit.resume"))
+      .all()
+      .at(-1);
+    const running = recent.filter((e) => e.at >= (lastResume?.at ?? 0)).length;
+    if (running >= 2) this.pause(clock.now() + FIFTEEN_MINUTES);
+  }
+
+  pause(until: number): void {
+    const { db, clock } = this.#deps;
+    const current = this.#pause();
+    if (current) {
+      // the notice repeats: edit it rather than posting a new one
+      if (current.until !== until && current.outboxId !== null) {
+        updateCard(db, clock, current.outboxId, limitCard(until));
+      }
+      db.orm.transaction((tx) => {
+        appendEvent(tx, {
+          at: clock.now(),
+          kind: "limit.pause",
+          payload: { until, outboxId: current.outboxId },
+        });
+      });
+      return;
+    }
+    const outboxId = postCard(db, clock, this.#deps.ownerChannel(), limitCard(until));
+    db.orm.transaction((tx) => {
+      appendEvent(tx, { at: clock.now(), kind: "limit.pause", payload: { until, outboxId } });
+    });
+    this.#deps.log?.("plan limit reached", { until });
+  }
+
+  resume(): void {
+    const { db, clock } = this.#deps;
+    db.orm.transaction((tx) => {
+      appendEvent(tx, { at: clock.now(), kind: "limit.resume", payload: {} });
+    });
+    this.#deps.onConcurrencyChange(this.#deps.holder.current.config.max_concurrent_turns);
+  }
+
+  #backoff(until: number | null): void {
+    const { db, clock } = this.#deps;
+    const last = db.orm
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.kind, "limit.backoff"))
+      .all()
+      .at(-1);
+    const lastClear = db.orm
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.kind, "limit.backoff_cleared"))
+      .all()
+      .at(-1);
+    const alreadyOn = last !== undefined && (lastClear === undefined || lastClear.at < last.at);
+    if (alreadyOn) return;
+    db.orm.transaction((tx) => {
+      appendEvent(tx, { at: clock.now(), kind: "limit.backoff", payload: { until } });
+    });
+    this.#deps.onConcurrencyChange(1);
+  }
+
+  #clearBackoff(): void {
+    const { db, clock } = this.#deps;
+    const last = db.orm
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.kind, "limit.backoff"))
+      .all()
+      .at(-1);
+    if (!last) return;
+    const lastClear = db.orm
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.kind, "limit.backoff_cleared"))
+      .all()
+      .at(-1);
+    if (lastClear !== undefined && lastClear.at >= last.at) return;
+    db.orm.transaction((tx) => {
+      appendEvent(tx, { at: clock.now(), kind: "limit.backoff_cleared", payload: {} });
+    });
+    this.#deps.onConcurrencyChange(this.#deps.holder.current.config.max_concurrent_turns);
+  }
+
+  get backedOff(): boolean {
+    const { db } = this.#deps;
+    const last = db.orm
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.kind, "limit.backoff"))
+      .all()
+      .at(-1);
+    if (!last) return false;
+    const lastClear = db.orm
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.kind, "limit.backoff_cleared"))
+      .all()
+      .at(-1);
+    return lastClear === undefined || lastClear.at < last.at;
+  }
+
+  /** What the Home tab shows: hours the company stood still this month. */
+  pausedMsThisMonth(now: number): number {
+    const start = new Date(now);
+    const monthStart = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1);
+    const events = this.#deps.db.orm
+      .select()
+      .from(schema.events)
+      .all()
+      .filter((e) => e.at >= monthStart && (e.kind === "limit.pause" || e.kind === "limit.resume"));
+    let total = 0;
+    let openedAt: number | undefined;
+    for (const e of events) {
+      if (e.kind === "limit.pause") {
+        openedAt ??= e.at;
+      } else if (openedAt !== undefined) {
+        total += e.at - openedAt;
+        openedAt = undefined;
+      }
+    }
+    if (openedAt !== undefined) total += now - openedAt;
+    return total;
   }
 }

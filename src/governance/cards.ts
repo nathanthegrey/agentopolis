@@ -80,6 +80,38 @@ export function renderApprovalCard(db: Db, clock: Clock, spec: ApprovalCardSpec)
   });
 }
 
+/** A plain card with no buttons (the limit notice); returns the outbox row that posts it. */
+export function postCard(db: Db, clock: Clock, channel: string, card: Card): number {
+  return db.orm.transaction((tx) =>
+    enqueueOutbox(tx, clock, {
+      kind: "card.post",
+      channel,
+      payload: { text: card.text, blocks: card.blocks, app: COMPANY_APP },
+    }),
+  );
+}
+
+/**
+ * Edits a card in place. A notice that repeats edits its own message rather than posting a new
+ * one (spec section 6); if the first post has not reached Slack yet, its payload is replaced.
+ */
+export function updateCard(db: Db, clock: Clock, outboxId: number, card: Card): void {
+  const row = db.orm.select().from(schema.outbox).where(eq(schema.outbox.id, outboxId)).get();
+  if (!row) return;
+  const payload = { text: card.text, blocks: card.blocks, app: COMPANY_APP };
+  db.orm.transaction((tx) => {
+    if (row.slackTs === null) {
+      tx.update(schema.outbox).set({ payload }).where(eq(schema.outbox.id, outboxId)).run();
+      return;
+    }
+    enqueueOutbox(tx, clock, {
+      kind: "card.update",
+      channel: row.channel,
+      payload: { ...payload, ts: row.slackTs },
+    });
+  });
+}
+
 export function renderPayload(db: Db, renderId: number): RenderPayload | undefined {
   const row = db.orm.select().from(schema.renders).where(eq(schema.renders.id, renderId)).get();
   return row ? (row.payload as RenderPayload) : undefined;
