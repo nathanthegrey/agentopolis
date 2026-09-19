@@ -48,6 +48,10 @@ export const messages = sqliteTable(
     body: text("body").notNull(),
     kind: text("kind", { enum: ["say", "ask", "report", "system"] }).notNull(),
     createdAt: integer("created_at").notNull(),
+    /** the message that answered this ask; "open asks" is a query for asks without one */
+    answeredBy: integer("answered_by"),
+    /** the one test result the daemon can see, on a report from a developer or designer */
+    testsGreen: integer("tests_green", { mode: "boolean" }),
   },
   (t) => [
     index("messages_to_id").on(t.to, t.id),
