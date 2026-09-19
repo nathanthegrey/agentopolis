@@ -40,8 +40,19 @@ export type TurnPromptInput = {
   remembered: string[];
 };
 
+/**
+ * The envelope's own guidance lives here rather than in the JSON schema's `description` fields:
+ * the schema travels on the command line every turn and must stay short (see envelope.ts), while
+ * this text is part of the cached prompt and costs nothing after the first turn.
+ */
 const CLOSING = [
   "Rispondi solo con la busta: i messaggi che mandi sono il risultato del turno.",
+  "- container: il nome esatto che hai letto qui sopra; to: un membro di quel container, o owner.",
+  "- kind: say (informazione), ask (ti serve una risposta), report (una consegna).",
+  "- body: al massimo cinque righe; le consegne lunghe sono file nel worktree.",
+  "- tests_green: obbligatorio su un report di developer o designer: i test passano?",
+  "- remember: righe da aggiungere alla tua MEMORY.md, solo se sei un agente fisso.",
+  "- parked: quello che hai trovato fuori da questo compito e non hai fatto.",
   "Se un permesso torna negato dicendo che è parcheggiato, chiudi qui il turno con la busta:",
   "sarai risvegliato con la decisione del proprietario.",
   "Non usare post se non per un messaggio che deve partire prima della fine del turno.",

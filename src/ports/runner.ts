@@ -74,6 +74,8 @@ export type TurnOutcome = {
 
 export interface RunnerEvents {
   onPermission(req: PermissionRequest): Promise<PermissionDecision>;
+  /** the child's pid, recorded on the turn row so a restart can reap it (spec section 13) */
+  onSpawn?(pid: number | undefined): void;
   onRateLimit?(info: RateLimitInfo): void;
   onActivity?(kind: "assistant" | "tool_use" | "tool_result"): void;
 }

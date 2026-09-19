@@ -1,13 +1,18 @@
 // Every agent's loop, the global cap, and what a turn actually is (spec sections 3, 6, 13).
 // The scheduler owns no queue: the pending set is a query, so a restart replays wakes for free.
-import { execFileSync } from "node:child_process";
 import { Cron } from "croner";
 import { eq, inArray } from "drizzle-orm";
 import pLimit from "p-limit";
 import type { SnapshotHolder } from "../config/holder.js";
 import type { Clock } from "../ports/clock.js";
 import type { Ids } from "../ports/ids.js";
-import type { AgentRunner, RateLimitInfo, RunnerEvents, TurnOutcome } from "../ports/runner.js";
+import type {
+  AgentRunner,
+  PermissionDecision,
+  PermissionRequest,
+  RateLimitInfo,
+  TurnOutcome,
+} from "../ports/runner.js";
 import type { Db } from "../store/db.js";
 import { appendEvent } from "../store/events.js";
 import { appendMessage, recordDelivery } from "../store/messages.js";
@@ -28,8 +33,8 @@ export type SchedulerDeps = {
   hookPath: string;
   /** false when the agent is paused, the plan is limit-paused, or its rung is refused */
   mayRun(agent: string): boolean;
-  /** the permission broker (Task 5); the scheduler only forwards */
-  onPermission: RunnerEvents["onPermission"];
+  /** the permission broker; only the scheduler knows which agent and turn asked */
+  onPermission(agent: string, turnId: number, req: PermissionRequest): Promise<PermissionDecision>;
   onRateLimit?(info: RateLimitInfo): void;
   onTurnFinished?(agent: string, turnId: number, outcome: TurnOutcome): void;
   log?(line: string, fields?: Record<string, unknown>): void;
@@ -148,23 +153,28 @@ export class Scheduler {
     return running.map((t) => t.id);
   }
 
-  /** Orphan CLI children of a dead daemon carry AGENTOPOLIS_TURN_ID (spec section 13). */
+  /**
+   * The CLI children a dead daemon left behind (spec section 13). Their pid is on the turn row,
+   * which is the only portable way to find them: AGENTOPOLIS_TURN_ID is in their environment, and
+   * an environment is not something `pgrep -f` can see. Each was spawned in its own process
+   * group, so killing the group takes the grandchildren with it.
+   */
   reapOrphans(): number[] {
-    let out = "";
-    try {
-      out = execFileSync("pgrep", ["-f", "AGENTOPOLIS_TURN_ID"], { encoding: "utf8" });
-    } catch {
-      return []; // pgrep exits 1 when nothing matches, and may not exist at all
-    }
     const reaped: number[] = [];
-    for (const line of out.split("\n")) {
-      const pid = Number.parseInt(line.trim(), 10);
-      if (!Number.isInteger(pid) || pid === process.pid) continue;
-      try {
-        process.kill(pid, "SIGKILL");
-        reaped.push(pid);
-      } catch {
-        // already gone
+    for (const turn of this.#deps.db.orm
+      .select()
+      .from(schema.turns)
+      .where(eq(schema.turns.status, "running"))
+      .all()) {
+      if (turn.pid === null || turn.pid <= 1) continue;
+      for (const target of [-turn.pid, turn.pid]) {
+        try {
+          process.kill(target, "SIGKILL");
+          reaped.push(turn.pid);
+          break;
+        } catch {
+          // already gone, or never a group leader
+        }
       }
     }
     return reaped;
@@ -242,7 +252,12 @@ export class Scheduler {
     let outcome: TurnOutcome;
     try {
       outcome = await runner.run(spec, {
-        onPermission: this.#deps.onPermission,
+        onPermission: (req) => this.#deps.onPermission(agent, turnId, req),
+        onSpawn: (pid) => {
+          if (pid !== undefined) {
+            db.orm.update(schema.turns).set({ pid }).where(eq(schema.turns.id, turnId)).run();
+          }
+        },
         ...(this.#deps.onRateLimit ? { onRateLimit: this.#deps.onRateLimit } : {}),
       });
     } catch (error) {

@@ -91,6 +91,8 @@ export class CliRunner implements AgentRunner {
       },
     });
 
+    events.onSpawn?.(child.pid);
+
     const stopWith = (status: TurnStatus, error: string) => {
       if (forcedStatus) return;
       forcedStatus = status;

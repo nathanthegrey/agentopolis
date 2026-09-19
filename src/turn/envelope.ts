@@ -42,10 +42,48 @@ export const Envelope = z.strictObject({
 });
 export type Envelope = z.infer<typeof Envelope>;
 
-/** Derived from the zod schema, so the two can never drift. Passed with --json-schema. */
-export const ENVELOPE_JSON_SCHEMA: Record<string, unknown> = z.toJSONSchema(Envelope, {
-  io: "input",
-});
+/**
+ * What goes on the command line with --json-schema: the structure only. It is derived from the
+ * zod schema, so the two can never drift, and then stripped of $schema, descriptions, defaults
+ * and minLength, which the CLI does not need in order to validate. The guidance those
+ * descriptions carry reaches the model through the turn prompt instead, where it is
+ * cache-stable and costs nothing per turn.
+ *
+ * The stripping is not only tidiness. On the owner's Mac, SentinelOne SIGKILLs any `node
+ * <script>` spawned with an argument of roughly 1,000 characters or more [measured 2026-09-19:
+ * 950 runs, 1,000 is killed, exit 137, reproduced outside this repository with a two-line
+ * script]. The CLI is a node program, so the full 1,269-character schema killed every turn
+ * before it emitted a line. ARGV_SAFE_LIMIT keeps us under that, and asserts it at load rather
+ * than letting a future field be killed silently.
+ */
+const STRIPPED = new Set(["$schema", "description", "default", "minLength"]);
+
+function structureOnly(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(structureOnly);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([key]) => !STRIPPED.has(key))
+        .map(([key, v]) => [key, structureOnly(v)]),
+    );
+  }
+  return value;
+}
+
+/** Below what this machine's endpoint agent kills; see the note above. */
+export const ARGV_SAFE_LIMIT = 950;
+
+export const ENVELOPE_JSON_SCHEMA: Record<string, unknown> = structureOnly(
+  z.toJSONSchema(Envelope, { io: "input" }),
+) as Record<string, unknown>;
+
+const SCHEMA_ARG_LENGTH = JSON.stringify(ENVELOPE_JSON_SCHEMA).length;
+if (SCHEMA_ARG_LENGTH > ARGV_SAFE_LIMIT) {
+  throw new Error(
+    `the envelope JSON schema is ${SCHEMA_ARG_LENGTH} characters on the command line, over the ` +
+      `${ARGV_SAFE_LIMIT} an endpoint agent tolerates; shorten it or pass it another way`,
+  );
+}
 
 export type ParseResult = { ok: true; envelope: Envelope } | { ok: false; error: string };
 
