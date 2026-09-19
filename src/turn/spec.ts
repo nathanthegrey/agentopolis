@@ -62,6 +62,51 @@ export function buildAgentsJson(
   return Object.keys(out).length === 0 ? undefined : JSON.stringify(out);
 }
 
+/**
+ * Allocates and stores the session id before the spawn, so a crash can never orphan a session,
+ * and upserts the row of an agent the snapshot knows but the store does not.
+ */
+export function ensureSession(
+  snapshot: Snapshot,
+  db: Db,
+  clock: Clock,
+  ids: Ids,
+  agentName: string,
+): { sessionId: string; resume: boolean } {
+  const row = db.orm.select().from(schema.agents).where(eq(schema.agents.name, agentName)).get();
+  const file = snapshot.agents.get(agentName);
+  const existing = row?.sessionId ?? file?.session_id ?? null;
+  if (existing !== null) return { sessionId: existing, resume: true };
+
+  const roleName = file?.role ?? row?.role;
+  const role = roleName ? snapshot.roles.get(roleName) : undefined;
+  if (!role) throw new Error(`ensureSession: no role for agent "${agentName}"`);
+  const sessionId = ids.uuid();
+  const now = clock.now();
+  if (row) {
+    db.orm
+      .update(schema.agents)
+      .set({ sessionId, sessionStartedAt: now })
+      .where(eq(schema.agents.name, agentName))
+      .run();
+  } else {
+    db.orm
+      .insert(schema.agents)
+      .values({
+        name: agentName,
+        role: role.name,
+        display: file?.display ?? agentName,
+        project: file?.project ?? null,
+        reportsTo: file?.reports_to ?? null,
+        kind: role.kind,
+        sessionId,
+        sessionStartedAt: now,
+      })
+      .run();
+  }
+  return { sessionId, resume: false };
+}
+
 export function buildTurnSpec(
   snapshot: Snapshot,
   db: Db,
@@ -90,34 +135,7 @@ export function buildTurnSpec(
   const projectSlug = file?.project ?? row?.project ?? undefined;
   const project = projectSlug ? snapshot.projects.get(projectSlug) : undefined;
 
-  // the session id is allocated and stored before the spawn, so a crash cannot orphan a session
-  let sessionId = row?.sessionId ?? file?.session_id ?? null;
-  const resume = sessionId !== null;
-  if (sessionId === null) {
-    sessionId = ids.uuid();
-    const now = clock.now();
-    if (row) {
-      db.orm
-        .update(schema.agents)
-        .set({ sessionId, sessionStartedAt: now })
-        .where(eq(schema.agents.name, agentName))
-        .run();
-    } else {
-      db.orm
-        .insert(schema.agents)
-        .values({
-          name: agentName,
-          role: role.name,
-          display: file?.display ?? agentName,
-          project: projectSlug ?? null,
-          reportsTo: file?.reports_to ?? null,
-          kind: role.kind,
-          sessionId,
-          sessionStartedAt: now,
-        })
-        .run();
-    }
-  }
+  const { sessionId, resume } = ensureSession(snapshot, db, clock, ids, agentName);
 
   mkdirSync(opts.runsDir, { recursive: true });
   const systemPromptFile = join(opts.runsDir, `${opts.turnId}.system.md`);

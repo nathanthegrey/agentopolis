@@ -55,6 +55,8 @@ export type TurnOutcome = {
   status: TurnStatus;
   sessionId: string;
   resultText: string | undefined;
+  /** the result's structured_output: the envelope, when --json-schema was passed */
+  structuredOutput: unknown;
   costMicro: number | null;
   costBasis: "list" | "managed" | "unknown" | null;
   modelUsage: unknown;

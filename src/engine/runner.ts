@@ -51,6 +51,7 @@ export class CliRunner implements AgentRunner {
       status: "failed",
       sessionId: spec.sessionId,
       resultText: undefined,
+      structuredOutput: undefined,
       costMicro: null,
       costBasis: null,
       modelUsage: null,

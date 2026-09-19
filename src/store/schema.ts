@@ -116,6 +116,8 @@ export const requests = sqliteTable(
     createdAt: integer("created_at").notNull(),
     decidedBy: text("decided_by"),
     decidedAt: integer("decided_at"),
+    /** the turn whose prompt carried this outcome; null means the agent has not been told */
+    toldAt: integer("told_at"),
     result: text("result", { mode: "json" }),
     epoch: integer("epoch").notNull().default(0),
   },
@@ -134,6 +136,10 @@ export const permissionRequests = sqliteTable("permission_requests", {
   status: text("status", { enum: ["pending", "allowed", "denied", "expired"] }).notNull(),
   createdAt: integer("created_at").notNull(),
   decidedAt: integer("decided_at"),
+  /** the turn whose prompt carried this outcome; null means the agent has not been told */
+  toldAt: integer("told_at"),
+  /** "Approva per questo compito" stores an allow rule scoped to this task (spec section 10) */
+  taskId: integer("task_id"),
 });
 
 export const tasks = sqliteTable("tasks", {
