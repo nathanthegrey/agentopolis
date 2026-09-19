@@ -150,6 +150,28 @@ export function taskCard(t: {
 }
 export const taskCardUpdate = taskCard;
 
+/**
+ * A task the loop guard stopped (A5): the owner's two moves, and nothing else. The buttons carry
+ * the renders row id, like every other card.
+ */
+export function blockedTaskCard(
+  t: { title: string; costMicro: number | null; agents: string[]; why: string },
+  renderId: number,
+): Card {
+  const base = taskCard({ ...t, state: "bloccato" });
+  return finish(base.text, [
+    ...base.blocks,
+    context(t.why),
+    actions(
+      [
+        button(S.unblock, "unblock", String(renderId), { style: "primary" }),
+        button(S.closeTask, "close_task", String(renderId), { style: "danger" }),
+      ],
+      `blocked:${renderId}`,
+    ),
+  ]);
+}
+
 export function statusLine(s: { display: string; seconds: number }): string {
   return S.working(s.display, S.duration(s.seconds));
 }

@@ -12,6 +12,8 @@ export const S = {
   deny: "Nega",
   details: "Dettagli",
   reopen: "Riapri",
+  unblock: "Sblocca",
+  closeTask: "Chiudi",
   denyConfirmTitle: "Sei sicuro?",
   denyConfirmText: "Questa azione è distruttiva e non si può annullare.",
   yes: "Sì",
